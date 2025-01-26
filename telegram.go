@@ -4,15 +4,15 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"strconv"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
-	authorizedUserID = 161508862
-	dbPath           = "subtrends.db"
-	maxHistory       = 10
+	dbPath     = "subtrends.db"
+	maxHistory = 10
 )
 
 type Bot struct {
@@ -32,11 +32,11 @@ func NewBot(token string) (*Bot, error) {
 		return nil, err
 	}
 
-	// Create messages table if not exists
+	// Create messages table if not exists with UNIQUE constraint
 	_, err = db.Exec(`
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            message_text TEXT NOT NULL,
+            message_text TEXT NOT NULL UNIQUE,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `)
@@ -54,12 +54,16 @@ func NewBot(token string) (*Bot, error) {
 }
 
 func (b *Bot) saveMessage(text string) error {
-	_, err := b.db.Exec("INSERT INTO messages (message_text) VALUES (?)", text)
+	// Use INSERT OR REPLACE to handle duplicates
+	_, err := b.db.Exec(`
+        INSERT OR REPLACE INTO messages (message_text, timestamp) 
+        VALUES (?, CURRENT_TIMESTAMP)
+    `, text)
 	if err != nil {
 		return err
 	}
 
-	// Keep only last 10 messages
+	// Keep only last N unique messages
 	_, err = b.db.Exec(`
         DELETE FROM messages 
         WHERE id NOT IN (
@@ -95,6 +99,13 @@ func (b *Bot) getHistory() ([]string, error) {
 }
 
 func (b *Bot) handleMessage(message *tgbotapi.Message) error {
+	// Get authorized user ID from environment variable
+	authorizedUserIDStr := os.Getenv("AUTHORIZED_USER_ID")
+	authorizedUserID, err := strconv.ParseInt(authorizedUserIDStr, 10, 64)
+	if err != nil {
+		return err
+	}
+
 	// Check if user is authorized
 	if message.From.ID != authorizedUserID {
 		reply := tgbotapi.NewMessage(message.Chat.ID, "Unauthorized user")
