@@ -11,12 +11,21 @@ import (
 	"time"
 )
 
-// Constants for rate limiting
+// Constants for rate limiting and API endpoints
 const (
 	// Reddit API allows 60 requests per minute
 	requestsPerMinute = 60
 	// Calculate minimum time between requests
 	minTimeBetweenRequests = time.Minute / requestsPerMinute
+
+	// API URLs
+	redditBaseURL = "https://oauth.reddit.com"
+	redditAuthURL = "https://www.reddit.com/api/v1/access_token"
+
+	// Default parameters
+	defaultPostLimit    = 7
+	defaultCommentLimit = 7
+	defaultTimeFrame    = "day"
 )
 
 // RateLimiter handles API request timing
@@ -105,7 +114,7 @@ func getRedditAccessToken(rl *RateLimiter) (string, error) {
 	}
 
 	data := strings.NewReader("grant_type=client_credentials")
-	req, err := http.NewRequest("POST", "https://www.reddit.com/api/v1/access_token", data)
+	req, err := http.NewRequest("POST", redditAuthURL, data)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %v", err)
 	}
@@ -137,7 +146,7 @@ func fetchTopPosts(rl *RateLimiter, subreddit, token string) ([]RedditPost, erro
 		return nil, fmt.Errorf("REDDIT_USER_AGENT environment variable is not set")
 	}
 
-	url := fmt.Sprintf("https://oauth.reddit.com/r/%s/top?limit=7&t=day", subreddit)
+	url := fmt.Sprintf("%s/r/%s/top?limit=%d&t=%s", redditBaseURL, subreddit, defaultPostLimit, defaultTimeFrame)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
@@ -171,7 +180,7 @@ func fetchTopComments(rl *RateLimiter, permalink, token string) ([]string, error
 	log.Printf("INFO: Fetching top comments for post: %s", permalink)
 
 	agent := os.Getenv("REDDIT_USER_AGENT")
-	url := fmt.Sprintf("https://oauth.reddit.com%s.json?limit=100", permalink)
+	url := fmt.Sprintf("%s%s.json?limit=%d", redditBaseURL, permalink, 100)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
@@ -220,8 +229,8 @@ func fetchTopComments(rl *RateLimiter, permalink, token string) ([]string, error
 			}
 		}
 
-		// Take top 7 comments
-		for i := 0; i < len(allComments) && i < 7; i++ {
+		// Take top comments based on defaultCommentLimit
+		for i := 0; i < len(allComments) && i < defaultCommentLimit; i++ {
 			topComments = append(topComments, allComments[i].Body)
 		}
 	}
