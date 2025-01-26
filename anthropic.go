@@ -39,6 +39,10 @@ Focus on:
 - Notable trends or patterns
 - Overall community sentiment
 
+Rules:
+- Don't reply with anything but summary.
+- Don't reply with the summary for each post. You must cover themes, trends and key points.
+
 Posts to analyze:
 
 %s`
