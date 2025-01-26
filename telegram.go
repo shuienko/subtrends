@@ -154,9 +154,25 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) error {
 }
 
 func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) error {
-	// Send full message text when button is clicked
-	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, callback.Data)
-	_, err := b.api.Send(msg)
+	// Get Reddit data using the callback data (subreddit name)
+	token, err := getRedditAccessToken(&RateLimiter{})
+	if err != nil {
+		return err
+	}
+
+	data, err := subredditData(callback.Data, token)
+	if err != nil {
+		return err
+	}
+
+	summary, err := summarizePosts(data)
+	if err != nil {
+		return err
+	}
+
+	// Send the summary to the user
+	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, summary)
+	_, err = b.api.Send(msg)
 	return err
 }
 
