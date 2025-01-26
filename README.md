@@ -50,7 +50,8 @@ AUTHORIZED_USER_ID=your_telegram_user_id
 3. Build and run with Docker:
 ```bash
 docker build -t subtrends-bot .
-docker run -d --env-file .env -v subtrends-data:/data --name subtrends-bot subtrends-bot
+docker run -d --env-file .env -v $(pwd)/subtrends.db:/app/subtrends.db --name subtrends-bot subtrends-bot
+
 ```
 
 ## 🎮 Usage
