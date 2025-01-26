@@ -170,6 +170,7 @@ func getRedditAccessToken() string {
 }
 
 func fetchTopPosts(subreddit, token string) []RedditPost {
+	agent := os.Getenv("REDDIT_USER_AGENT")
 	url := fmt.Sprintf("https://oauth.reddit.com/r/%s/top?limit=7&t=day", subreddit)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -177,7 +178,7 @@ func fetchTopPosts(subreddit, token string) []RedditPost {
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", "golang:reddit_top_posts:v1.0 (by /u/yourusername)")
+	req.Header.Set("User-Agent", agent)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -199,6 +200,7 @@ func fetchTopPosts(subreddit, token string) []RedditPost {
 }
 
 func fetchTopComments(permalink, token string) []string {
+	agent := os.Getenv("REDDIT_USER_AGENT")
 	url := fmt.Sprintf("https://oauth.reddit.com%s.json?limit=100", permalink)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -206,7 +208,7 @@ func fetchTopComments(permalink, token string) []string {
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", "golang:reddit_top_posts:v1.0 (by /u/yourusername)")
+	req.Header.Set("User-Agent", agent)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
