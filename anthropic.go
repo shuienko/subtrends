@@ -34,7 +34,7 @@ const (
 // promptTemplate defines the template for the summarization request
 const promptTemplate = `Please provide a concise summary of these Reddit posts and discussions. 
 Focus on:
-- Main themes and topics
+- Main themes and topics; group similar topics together if possible
 - Key points from popular comments
 - Notable trends or patterns
 - Overall community sentiment

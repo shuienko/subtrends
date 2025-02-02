@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	dbPath     = "subtrends.db"
+	dbPath     = "data/subtrends.db"
 	maxHistory = 10
 )
 
@@ -123,14 +123,14 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) error {
 		var buttons [][]tgbotapi.InlineKeyboardButton
 		for _, msg := range history {
 			button := tgbotapi.NewInlineKeyboardButtonData(
-				msg[:min(20, len(msg))],
+				msg[:min(40, len(msg))],
 				msg,
 			)
 			buttons = append(buttons, []tgbotapi.InlineKeyboardButton{button})
 		}
 
 		keyboard := tgbotapi.NewInlineKeyboardMarkup(buttons...)
-		reply := tgbotapi.NewMessage(message.Chat.ID, "## HISTORY ##")
+		reply := tgbotapi.NewMessage(message.Chat.ID, "HISTORY:")
 		reply.ReplyMarkup = keyboard
 		_, err = b.api.Send(reply)
 		return err
