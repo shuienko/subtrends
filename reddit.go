@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -76,47 +77,57 @@ type RedditComment struct {
 // waitForRateLimit ensures we don't exceed Reddit's rate limits
 func (rl *RateLimiter) waitForRateLimit() {
 	elapsed := time.Since(rl.lastRequest)
+
+	// Exponential backoff calculation
 	requiredWait := minTimeBetweenRequests * time.Duration(math.Pow(2, float64(rl.retryCount)))
 	if requiredWait > maxBackoffTime {
 		requiredWait = maxBackoffTime
 	}
 
+	// Only wait if necessary
 	if elapsed < requiredWait {
-		time.Sleep(requiredWait - elapsed)
+		waitTime := requiredWait - elapsed
+		log.Printf("Rate limiting: Sleeping for %v", waitTime)
+		time.Sleep(waitTime)
+	} else {
+		// If enough time has passed, reset retry count
+		rl.retryCount = 0
 	}
 
+	// Update the last request time
 	rl.lastRequest = time.Now()
-	if elapsed >= minTimeBetweenRequests {
-		rl.retryCount = 0 // Reset retry count on successful request
-	} else {
-		rl.retryCount++ // Increase retry count if we had to wait
-	}
 }
 
 // makeRequest handles HTTP requests with rate limiting and common error handling
 func (rl *RateLimiter) makeRequest(req *http.Request) (*http.Response, error) {
-	rl.waitForRateLimit()
+	for {
+		rl.waitForRateLimit()
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("request failed: %v", err)
+		}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %v", err)
+		if resp.StatusCode == 429 {
+			retryAfter := resp.Header.Get("Retry-After")
+			if retryAfter != "" {
+				waitTime, err := strconv.Atoi(retryAfter)
+				if err == nil {
+					log.Printf("Rate limit hit, waiting %d seconds", waitTime)
+					time.Sleep(time.Duration(waitTime) * time.Second)
+				}
+			}
+			rl.retryCount++
+			continue
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+		}
+
+		return resp, nil
 	}
-
-	// Handle rate limiting response codes
-	if resp.StatusCode == 429 {
-		// If we hit the rate limit, wait for a minute and retry
-		log.Printf("Rate limit hit, waiting for 1 minute before retry")
-		time.Sleep(time.Minute)
-		return rl.makeRequest(req)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
-	}
-
-	return resp, nil
 }
 
 // getRedditAccessToken obtains an OAuth token for Reddit API access, with caching
