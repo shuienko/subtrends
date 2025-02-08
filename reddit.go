@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -13,10 +14,9 @@ import (
 
 // Constants for rate limiting and API endpoints
 const (
-	// Reddit API allows 60 requests per minute
-	requestsPerMinute = 60
 	// Calculate minimum time between requests
-	minTimeBetweenRequests = time.Minute / requestsPerMinute
+	minTimeBetweenRequests = 2 * time.Second   // Base rate limit
+	maxBackoffTime         = 128 * time.Second // Maximum backoff time
 
 	// API URLs
 	redditBaseURL = "https://oauth.reddit.com"
@@ -28,9 +28,15 @@ const (
 	defaultTimeFrame    = "day"
 )
 
+var (
+	cachedToken     string
+	tokenExpiration time.Time
+)
+
 // RateLimiter handles API request timing
 type RateLimiter struct {
 	lastRequest time.Time
+	retryCount  int
 }
 
 // RedditTokenResponse represents the OAuth token response from Reddit
@@ -70,10 +76,21 @@ type RedditComment struct {
 // waitForRateLimit ensures we don't exceed Reddit's rate limits
 func (rl *RateLimiter) waitForRateLimit() {
 	elapsed := time.Since(rl.lastRequest)
-	if elapsed < minTimeBetweenRequests {
-		time.Sleep(minTimeBetweenRequests - elapsed)
+	requiredWait := minTimeBetweenRequests * time.Duration(math.Pow(2, float64(rl.retryCount)))
+	if requiredWait > maxBackoffTime {
+		requiredWait = maxBackoffTime
 	}
+
+	if elapsed < requiredWait {
+		time.Sleep(requiredWait - elapsed)
+	}
+
 	rl.lastRequest = time.Now()
+	if elapsed >= minTimeBetweenRequests {
+		rl.retryCount = 0 // Reset retry count on successful request
+	} else {
+		rl.retryCount++ // Increase retry count if we had to wait
+	}
 }
 
 // makeRequest handles HTTP requests with rate limiting and common error handling
@@ -102,9 +119,15 @@ func (rl *RateLimiter) makeRequest(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-// getRedditAccessToken obtains an OAuth token for Reddit API access
+// getRedditAccessToken obtains an OAuth token for Reddit API access, with caching
 func getRedditAccessToken(rl *RateLimiter) (string, error) {
-	log.Printf("INFO: Requesting Reddit access token")
+	// Check if cached token is still valid
+	if time.Now().Before(tokenExpiration) && cachedToken != "" {
+		log.Printf("INFO: Using cached Reddit access token, expires in %v", time.Until(tokenExpiration))
+		return cachedToken, nil
+	}
+
+	log.Printf("INFO: Requesting new Reddit access token")
 
 	clientID := os.Getenv("REDDIT_CLIENT_ID")
 	clientSecret := os.Getenv("REDDIT_CLIENT_SECRET")
@@ -128,13 +151,20 @@ func getRedditAccessToken(rl *RateLimiter) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	var tokenResponse RedditTokenResponse
+	var tokenResponse struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
 		return "", fmt.Errorf("failed to parse access token response: %v", err)
 	}
 
-	log.Printf("INFO: Reddit access token obtained successfully")
-	return tokenResponse.AccessToken, nil
+	// Cache the token with expiration time
+	cachedToken = tokenResponse.AccessToken
+	tokenExpiration = time.Now().Add(time.Duration(tokenResponse.ExpiresIn) * time.Second)
+
+	log.Printf("INFO: Reddit access token obtained successfully, expires in %d seconds", tokenResponse.ExpiresIn)
+	return cachedToken, nil
 }
 
 // fetchTopPosts retrieves the top posts from a specified subreddit
