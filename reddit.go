@@ -5,19 +5,15 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Constants for rate limiting and API endpoints
 const (
-	// Calculate minimum time between requests
-	minTimeBetweenRequests = 2 * time.Second   // Base rate limit
-	maxBackoffTime         = 128 * time.Second // Maximum backoff time
-
 	// API URLs
 	redditBaseURL = "https://oauth.reddit.com"
 	redditAuthURL = "https://www.reddit.com/api/v1/access_token"
@@ -32,12 +28,6 @@ var (
 	cachedToken     string
 	tokenExpiration time.Time
 )
-
-// RateLimiter handles API request timing
-type RateLimiter struct {
-	lastRequest time.Time
-	retryCount  int
-}
 
 // RedditTokenResponse represents the OAuth token response from Reddit
 type RedditTokenResponse struct {
@@ -73,41 +63,11 @@ type RedditComment struct {
 	} `json:"data"`
 }
 
-// waitForRateLimit ensures we don't exceed Reddit's rate limits
-func (rl *RateLimiter) waitForRateLimit() {
-	elapsed := time.Since(rl.lastRequest)
-	requiredWait := minTimeBetweenRequests * time.Duration(math.Pow(2, float64(rl.retryCount)))
-	if requiredWait > maxBackoffTime {
-		requiredWait = maxBackoffTime
-	}
-
-	if elapsed < requiredWait {
-		time.Sleep(requiredWait - elapsed)
-	}
-
-	rl.lastRequest = time.Now()
-	if elapsed >= minTimeBetweenRequests {
-		rl.retryCount = 0 // Reset retry count on successful request
-	} else {
-		rl.retryCount++ // Increase retry count if we had to wait
-	}
-}
-
 // makeRequest handles HTTP requests with rate limiting and common error handling
-func (rl *RateLimiter) makeRequest(req *http.Request) (*http.Response, error) {
-	rl.waitForRateLimit()
-
+func makeRequest(req *http.Request) (*http.Response, error) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %v", err)
-	}
-
-	// Handle rate limiting response codes
-	if resp.StatusCode == 429 {
-		// If we hit the rate limit, wait for a minute and retry
-		log.Printf("Rate limit hit, waiting for 1 minute before retry")
-		time.Sleep(time.Minute)
-		return rl.makeRequest(req)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -120,7 +80,7 @@ func (rl *RateLimiter) makeRequest(req *http.Request) (*http.Response, error) {
 }
 
 // getRedditAccessToken obtains an OAuth token for Reddit API access, with caching
-func getRedditAccessToken(rl *RateLimiter) (string, error) {
+func getRedditAccessToken() (string, error) {
 	// Check if cached token is still valid
 	if time.Now().Before(tokenExpiration) && cachedToken != "" {
 		log.Printf("INFO: Using cached Reddit access token, expires in %v", time.Until(tokenExpiration))
@@ -145,7 +105,7 @@ func getRedditAccessToken(rl *RateLimiter) (string, error) {
 	req.SetBasicAuth(clientID, clientSecret)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := rl.makeRequest(req)
+	resp, err := makeRequest(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to get access token: %v", err)
 	}
@@ -168,7 +128,7 @@ func getRedditAccessToken(rl *RateLimiter) (string, error) {
 }
 
 // fetchTopPosts retrieves the top posts from a specified subreddit
-func fetchTopPosts(rl *RateLimiter, subreddit, token string) ([]RedditPost, error) {
+func fetchTopPosts(subreddit, token string) ([]RedditPost, error) {
 	log.Printf("INFO: Fetching top posts for subreddit: %s", subreddit)
 
 	agent := os.Getenv("REDDIT_USER_AGENT")
@@ -185,7 +145,7 @@ func fetchTopPosts(rl *RateLimiter, subreddit, token string) ([]RedditPost, erro
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("User-Agent", agent)
 
-	resp, err := rl.makeRequest(req)
+	resp, err := makeRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch top posts: %v", err)
 	}
@@ -206,7 +166,7 @@ func fetchTopPosts(rl *RateLimiter, subreddit, token string) ([]RedditPost, erro
 }
 
 // fetchTopComments retrieves the top comments for a specific post
-func fetchTopComments(rl *RateLimiter, permalink, token string) ([]string, error) {
+func fetchTopComments(permalink, token string) ([]string, error) {
 	log.Printf("INFO: Fetching top comments for post: %s", permalink)
 
 	agent := os.Getenv("REDDIT_USER_AGENT")
@@ -219,7 +179,7 @@ func fetchTopComments(rl *RateLimiter, permalink, token string) ([]string, error
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("User-Agent", agent)
 
-	resp, err := rl.makeRequest(req)
+	resp, err := makeRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch comments: %v", err)
 	}
@@ -265,39 +225,50 @@ func fetchTopComments(rl *RateLimiter, permalink, token string) ([]string, error
 		}
 	}
 
-	log.Printf("INFO: Successfully fetched %d top comments", len(topComments))
+	log.Printf("INFO: Successfully fetched %d top comments: %s", len(topComments), permalink)
 	return topComments, nil
 }
 
 // subredditData aggregates data from a subreddit including posts and their top comments
 func subredditData(subreddit, token string) (string, error) {
-	rl := &RateLimiter{
-		lastRequest: time.Now().Add(-minTimeBetweenRequests), // Initialize to allow immediate first request
-	}
 
 	output := ""
-	posts, err := fetchTopPosts(rl, subreddit, token)
+	posts, err := fetchTopPosts(subreddit, token)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch posts: %v", err)
 	}
 
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
 	for i, post := range posts {
+		mu.Lock()
 		output += fmt.Sprintf("Post %d: %s\n", i+1, post.Title)
 		output += fmt.Sprintf("Upvotes: %d\n", post.Ups)
 		if post.Selftext != "" {
 			output += fmt.Sprintf("Content: %s\n", post.Selftext)
 		}
-
-		topComments, err := fetchTopComments(rl, post.Permalink, token)
-		if err != nil {
-			log.Printf("WARNING: Failed to fetch comments for post %d: %v", i+1, err)
-			continue
-		}
-
 		output += fmt.Sprintln("Top Comments:")
-		for j, comment := range topComments {
-			output += fmt.Sprintf("\t%d. %s\n", j+1, comment)
-		}
+		mu.Unlock()
+
+		wg.Add(1)
+		go func(post RedditPost, index int) {
+			defer wg.Done()
+
+			topComments, err := fetchTopComments(post.Permalink, token)
+			if err != nil {
+				log.Printf("WARNING: Failed to fetch comments for post %d: %v", index+1, err)
+				return
+			}
+
+			mu.Lock()
+			for j, comment := range topComments {
+				output += fmt.Sprintf("\t%d. %s\n", j+1, comment)
+			}
+			mu.Unlock()
+		}(post, i)
 	}
+
+	wg.Wait()
 	return output, nil
 }

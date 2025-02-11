@@ -119,14 +119,16 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) error {
 			return err
 		}
 
-		// Create inline keyboard with message history
+		// Create inline keyboard with message history (2 columns)
 		var buttons [][]tgbotapi.InlineKeyboardButton
-		for _, msg := range history {
-			button := tgbotapi.NewInlineKeyboardButtonData(
-				msg[:min(40, len(msg))],
-				msg,
-			)
-			buttons = append(buttons, []tgbotapi.InlineKeyboardButton{button})
+		for i := 0; i < len(history); i += 2 {
+			row := []tgbotapi.InlineKeyboardButton{
+				tgbotapi.NewInlineKeyboardButtonData(history[i][:min(40, len(history[i]))], history[i]),
+			}
+			if i+1 < len(history) {
+				row = append(row, tgbotapi.NewInlineKeyboardButtonData(history[i+1][:min(40, len(history[i+1]))], history[i+1]))
+			}
+			buttons = append(buttons, row)
 		}
 
 		keyboard := tgbotapi.NewInlineKeyboardMarkup(buttons...)
@@ -137,9 +139,10 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) error {
 	}
 
 	// Handle regular message
-	token, err := getRedditAccessToken(&RateLimiter{})
+	token, err := getRedditAccessToken()
 	if err != nil {
-		log.Fatalf("Failed to get access token: %v", err)
+		log.Printf("Failed to get access token: %v", err)
+		return err
 	}
 	data, err := subredditData(message.Text, token)
 	summary, err := summarizePosts(data)
@@ -155,8 +158,9 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) error {
 
 func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) error {
 	// Get Reddit data using the callback data (subreddit name)
-	token, err := getRedditAccessToken(&RateLimiter{})
+	token, err := getRedditAccessToken()
 	if err != nil {
+		log.Printf("Failed to get access token: %v", err)
 		return err
 	}
 
