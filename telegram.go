@@ -145,7 +145,13 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) error {
 		return err
 	}
 	data, err := subredditData(message.Text, token)
+	if err != nil {
+		return err
+	}
 	summary, err := summarizePosts(data)
+	if err != nil {
+		return err
+	}
 
 	if err := b.saveMessage(message.Text); err != nil {
 		return err
