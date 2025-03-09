@@ -85,10 +85,6 @@ func (b *Bot) Start(ctx context.Context) error {
 				if err := b.handleMessage(update.Message); err != nil {
 					b.logger.Printf("Error handling message: %v", err)
 				}
-			} else if update.CallbackQuery != nil {
-				if err := b.handleCallback(update.CallbackQuery); err != nil {
-					b.logger.Printf("Error handling callback: %v", err)
-				}
 			}
 		case <-ctx.Done():
 			b.logger.Println("Context canceled, stopping bot...")
@@ -182,6 +178,30 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) error {
 	deleteMsg := tgbotapi.NewDeleteMessage(message.Chat.ID, sentMsg.MessageID)
 	_, _ = b.api.Send(deleteMsg)
 
+	// Fetch posts again to get the links
+	posts, err := fetchTopPosts(subredditName, token)
+	if err != nil {
+		b.logger.Printf("Failed to fetch posts for links: %v", err)
+	} else {
+		// Append links to the summary
+		summary += "\n\n🔗 Top Posts\n"
+		// Define emoji numbers for better visual appeal
+		emojiNumbers := []string{"1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"}
+		for i, post := range posts {
+			if i >= defaultPostLimit {
+				break
+			}
+			// Use standard web URL instead of reddit:// protocol
+			webLink := fmt.Sprintf("https://www.reddit.com%s", post.Permalink)
+			// Use emoji instead of number
+			emojiIndex := i
+			if emojiIndex >= len(emojiNumbers) {
+				emojiIndex = len(emojiNumbers) - 1
+			}
+			summary += fmt.Sprintf("%s [%s](%s)\n", emojiNumbers[emojiIndex], post.Title, webLink)
+		}
+	}
+
 	// Send the summary
 	reply := tgbotapi.NewMessage(message.Chat.ID, summary)
 	reply.ParseMode = "Markdown"
@@ -240,59 +260,4 @@ The bot will analyze the top posts and comments from the past day and provide yo
 		_, err := b.api.Send(msg)
 		return err
 	}
-}
-
-func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) error {
-	// Send typing action to show the bot is processing
-	typingAction := tgbotapi.NewChatAction(callback.Message.Chat.ID, tgbotapi.ChatTyping)
-	_, _ = b.api.Send(typingAction)
-
-	// Answer the callback query to stop the loading animation on the button
-	callbackAnswer := tgbotapi.NewCallback(callback.ID, "")
-	_, _ = b.api.Request(callbackAnswer)
-
-	// Send initial processing message
-	processingMsg := tgbotapi.NewMessage(callback.Message.Chat.ID, fmt.Sprintf("🔍 Analyzing r/%s...\nThis might take a moment to fetch and process the data.", strings.TrimPrefix(callback.Data, "r/")))
-	sentMsg, _ := b.api.Send(processingMsg)
-
-	// Get Reddit data using the callback data (subreddit name)
-	token, err := getRedditAccessToken()
-	if err != nil {
-		b.logger.Printf("Failed to get access token: %v", err)
-		errorMsg := tgbotapi.NewMessage(callback.Message.Chat.ID, fmt.Sprintf("❌ Error: Failed to connect to Reddit. Please try again later.\n\nTechnical details: %v", err))
-		_, _ = b.api.Send(errorMsg)
-		return err
-	}
-
-	// Update processing message
-	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, sentMsg.MessageID, fmt.Sprintf("🔍 Connected to Reddit! Fetching posts from r/%s...", strings.TrimPrefix(callback.Data, "r/")))
-	_, _ = b.api.Send(editMsg)
-
-	data, err := subredditData(callback.Data, token)
-	if err != nil {
-		errorMsg := tgbotapi.NewMessage(callback.Message.Chat.ID, fmt.Sprintf("❌ Error: %v", err))
-		_, _ = b.api.Send(errorMsg)
-		return err
-	}
-
-	// Update processing message
-	editMsg = tgbotapi.NewEditMessageText(callback.Message.Chat.ID, sentMsg.MessageID, "🧠 Analyzing Reddit posts and generating summary...")
-	_, _ = b.api.Send(editMsg)
-
-	summary, err := summarizePosts(data)
-	if err != nil {
-		errorMsg := tgbotapi.NewMessage(callback.Message.Chat.ID, fmt.Sprintf("❌ Error: Failed to generate summary.\n\nTechnical details: %v", err))
-		_, _ = b.api.Send(errorMsg)
-		return err
-	}
-
-	// Delete the processing message
-	deleteMsg := tgbotapi.NewDeleteMessage(callback.Message.Chat.ID, sentMsg.MessageID)
-	_, _ = b.api.Send(deleteMsg)
-
-	// Send the summary
-	reply := tgbotapi.NewMessage(callback.Message.Chat.ID, summary)
-	reply.ParseMode = "Markdown"
-	_, err = b.api.Send(reply)
-	return err
 }
