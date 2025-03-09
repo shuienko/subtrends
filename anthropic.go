@@ -4,13 +4,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"time"
+
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -26,9 +29,14 @@ const (
 	// Request parameters
 	defaultMaxTokens   = 1000
 	defaultTemperature = 0.7
+	requestTimeout     = 30 * time.Second
 
 	// Output formatting
 	summaryHeader = "=== Claude's Summary ===\n"
+
+	// Rate limiting
+	anthropicRequestsPerMinute = 10
+	anthropicBurstSize         = 3
 )
 
 // promptTemplate defines the template for the summarization request
@@ -46,6 +54,11 @@ Rules:
 Posts to analyze:
 
 %s`
+
+var (
+	// Rate limiter for Anthropic API
+	anthropicLimiter = rate.NewLimiter(rate.Limit(anthropicRequestsPerMinute/60), anthropicBurstSize)
+)
 
 // Message represents a single message in the conversation with Claude
 type Message struct {
@@ -86,10 +99,14 @@ func summarizePosts(text string) (string, error) {
 	// Prepare the API request
 	request := createAnthropicRequest(model, text)
 
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+
 	// Make the API call
-	response, err := makeAnthropicAPICall(request, apiKey)
+	response, err := makeAnthropicAPICall(ctx, request, apiKey)
 	if err != nil {
-		return "", fmt.Errorf("API call failed: %v", err)
+		return "", fmt.Errorf("API call failed: %w", err)
 	}
 
 	// Format and return the response
@@ -97,30 +114,28 @@ func summarizePosts(text string) (string, error) {
 }
 
 // getEnvOrDefault returns the value of an environment variable or a default value if not set
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
 
 // getRequiredEnvVar returns the value of a required environment variable or an error if not set
 func getRequiredEnvVar(key string) (string, error) {
 	value := os.Getenv(key)
 	if value == "" {
-		return "", fmt.Errorf("%s environment variable is not set", key)
+		return "", ErrMissingEnvVar(key)
 	}
 	return value, nil
 }
 
-// createAnthropicRequest creates a new request structure for the Anthropic API
+// createAnthropicRequest creates a request structure for the Anthropic API
 func createAnthropicRequest(model, text string) AnthropicRequest {
+	// Format the prompt with the Reddit data
+	prompt := fmt.Sprintf(promptTemplate, text)
+
+	// Create the request structure
 	return AnthropicRequest{
 		Model: model,
 		Messages: []Message{
 			{
 				Role:    "user",
-				Content: fmt.Sprintf(promptTemplate, text),
+				Content: prompt,
 			},
 		},
 		MaxTokens:   defaultMaxTokens,
@@ -128,60 +143,83 @@ func createAnthropicRequest(model, text string) AnthropicRequest {
 	}
 }
 
-// makeAnthropicAPICall sends the request to the Anthropic API and returns the response
-func makeAnthropicAPICall(request AnthropicRequest, apiKey string) (*AnthropicResponse, error) {
-	// Marshal request to JSON
-	jsonData, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling request: %v", err)
+// makeAnthropicAPICall sends a request to the Anthropic API and returns the response
+func makeAnthropicAPICall(ctx context.Context, request AnthropicRequest, apiKey string) (*AnthropicResponse, error) {
+	// Apply rate limiting
+	if err := anthropicLimiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit wait failed: %w", err)
 	}
 
-	// Create HTTP request
-	req, err := http.NewRequest("POST", anthropicAPIEndpoint, bytes.NewBuffer(jsonData))
+	// Marshal the request to JSON
+	requestBody, err := json.Marshal(request)
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %v", err)
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Create the HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", anthropicAPIEndpoint, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("X-API-Key", apiKey)
 	req.Header.Set("anthropic-version", anthropicAPIVersion)
 
-	// Make the request
-	client := &http.Client{}
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: requestTimeout,
+	}
+
+	// Send the request
+	startTime := time.Now()
 	resp, err := client.Do(req)
+	requestDuration := time.Since(startTime)
+
+	log.Printf("INFO: Anthropic API request completed in %v", requestDuration)
+
 	if err != nil {
-		return nil, fmt.Errorf("error making request: %v", err)
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("ERROR: Error in Anthropic API call: %v", err)
-		return nil, fmt.Errorf("error reading response: %v", err)
+	// Check for HTTP errors
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API returned non-200 status code %d: %s", resp.StatusCode, string(bodyBytes))
 	}
-	log.Printf("INFO: Anthropic API call successful with status: %d", resp.StatusCode)
 
-	// Parse response
+	// Parse the response
 	var response AnthropicResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("error unmarshaling response: %v", err)
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, fmt.Errorf("failed to decode API response: %w", err)
 	}
 
 	// Check for API errors
-	if response.Error != nil {
+	if response.Error != nil && response.Error.Message != "" {
 		return nil, fmt.Errorf("API error: %s", response.Error.Message)
 	}
 
 	return &response, nil
 }
 
-// formatResponse formats the API response into the desired output format
+// formatResponse extracts and formats the text from the Anthropic API response
 func formatResponse(response *AnthropicResponse) (string, error) {
-	if len(response.Content) == 0 {
-		return "", fmt.Errorf("no content in response")
+	if response == nil {
+		return "", fmt.Errorf("nil response received")
 	}
 
-	return summaryHeader + strings.TrimSpace(response.Content[0].Text), nil
+	if len(response.Content) == 0 {
+		return "", fmt.Errorf("empty content in response")
+	}
+
+	// Extract the text from the response
+	text := response.Content[0].Text
+	if text == "" {
+		return "", fmt.Errorf("empty text in response content")
+	}
+
+	// Format the response with a header
+	return summaryHeader + text, nil
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // Constants for rate limiting and API endpoints
@@ -22,16 +24,29 @@ const (
 	defaultPostLimit    = 7
 	defaultCommentLimit = 7
 	defaultTimeFrame    = "day"
+
+	// Rate limiting
+	requestsPerSecond = 1
+	burstSize         = 5
+
+	// Token caching
+	tokenExpiryBuffer = 5 * time.Minute
 )
 
 var (
+	// Token caching
+	tokenMutex      sync.RWMutex
 	cachedToken     string
 	tokenExpiration time.Time
+
+	// Rate limiter
+	redditLimiter = rate.NewLimiter(rate.Limit(requestsPerSecond), burstSize)
 )
 
 // RedditTokenResponse represents the OAuth token response from Reddit
 type RedditTokenResponse struct {
-	AccessToken string `json:"access_token"`
+	AccessToken string        `json:"access_token"`
+	ExpiresIn   time.Duration `json:"expires_in"`
 }
 
 // RedditPost represents a Reddit post with essential fields
@@ -65,14 +80,31 @@ type RedditComment struct {
 
 // makeRequest handles HTTP requests with rate limiting and common error handling
 func makeRequest(req *http.Request) (*http.Response, error) {
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %v", err)
+	// Apply rate limiting
+	ctx := req.Context()
+	log.Printf("INFO: Waiting for rate limiter before making request to: %s %s", req.Method, req.URL.String())
+	if err := redditLimiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit wait failed: %w", err)
 	}
+
+	// Set a timeout for the request
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	log.Printf("INFO: Sending request: %s %s", req.Method, req.URL.String())
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("ERROR: Request failed: %s %s - %v", req.Method, req.URL.String(), err)
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	log.Printf("INFO: Received response: %s %s - Status: %d", req.Method, req.URL.String(), resp.StatusCode)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		log.Printf("ERROR: Unexpected status code: %s %s - Status: %d - Body: %s", req.Method, req.URL.String(), resp.StatusCode, string(body))
 		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -81,8 +113,22 @@ func makeRequest(req *http.Request) (*http.Response, error) {
 
 // getRedditAccessToken obtains an OAuth token for Reddit API access, with caching
 func getRedditAccessToken() (string, error) {
-	// Check if cached token is still valid
-	if time.Now().Before(tokenExpiration) && cachedToken != "" {
+	// Check if cached token is still valid (with buffer time)
+	tokenMutex.RLock()
+	if time.Now().Add(tokenExpiryBuffer).Before(tokenExpiration) && cachedToken != "" {
+		token := cachedToken
+		tokenMutex.RUnlock()
+		log.Printf("INFO: Using cached Reddit access token, expires in %v", time.Until(tokenExpiration))
+		return token, nil
+	}
+	tokenMutex.RUnlock()
+
+	// Need to get a new token
+	tokenMutex.Lock()
+	defer tokenMutex.Unlock()
+
+	// Double-check after acquiring write lock
+	if time.Now().Add(tokenExpiryBuffer).Before(tokenExpiration) && cachedToken != "" {
 		log.Printf("INFO: Using cached Reddit access token, expires in %v", time.Until(tokenExpiration))
 		return cachedToken, nil
 	}
@@ -93,182 +139,247 @@ func getRedditAccessToken() (string, error) {
 	clientSecret := os.Getenv("REDDIT_CLIENT_SECRET")
 
 	if clientID == "" || clientSecret == "" {
-		return "", fmt.Errorf("missing REDDIT_CLIENT_ID or REDDIT_CLIENT_SECRET environment variables")
+		return "", ErrMissingEnvVar("REDDIT_CLIENT_ID or REDDIT_CLIENT_SECRET")
 	}
 
 	data := strings.NewReader("grant_type=client_credentials")
 	req, err := http.NewRequest("POST", redditAuthURL, data)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %v", err)
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.SetBasicAuth(clientID, clientSecret)
+	req.Header.Set("User-Agent", "SubTrends/1.0")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := makeRequest(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to get access token: %v", err)
+		return "", fmt.Errorf("token request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	var tokenResponse struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
-		return "", fmt.Errorf("failed to parse access token response: %v", err)
+	var tokenResp RedditTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", fmt.Errorf("failed to decode token response: %w", err)
 	}
 
-	// Cache the token with expiration time
-	cachedToken = tokenResponse.AccessToken
-	tokenExpiration = time.Now().Add(time.Duration(tokenResponse.ExpiresIn) * time.Second)
+	if tokenResp.AccessToken == "" {
+		return "", fmt.Errorf("empty access token received")
+	}
 
-	log.Printf("INFO: Reddit access token obtained successfully, expires in %d seconds", tokenResponse.ExpiresIn)
+	// Cache the token
+	cachedToken = tokenResp.AccessToken
+	tokenExpiration = time.Now().Add(time.Second * tokenResp.ExpiresIn)
+	log.Printf("INFO: New Reddit token acquired, expires in %v", tokenResp.ExpiresIn*time.Second)
+
 	return cachedToken, nil
 }
 
-// fetchTopPosts retrieves the top posts from a specified subreddit
+// fetchTopPosts fetches top posts from a subreddit
 func fetchTopPosts(subreddit, token string) ([]RedditPost, error) {
-	log.Printf("INFO: Fetching top posts for subreddit: %s", subreddit)
-
-	agent := os.Getenv("REDDIT_USER_AGENT")
-	if agent == "" {
-		return nil, fmt.Errorf("REDDIT_USER_AGENT environment variable is not set")
+	if subreddit == "" {
+		return nil, fmt.Errorf("subreddit name is required")
 	}
 
-	url := fmt.Sprintf("%s/r/%s/top?limit=%d&t=%s", redditBaseURL, subreddit, defaultPostLimit, defaultTimeFrame)
+	// Clean subreddit name (remove r/ prefix if present)
+	subreddit = strings.TrimPrefix(subreddit, "r/")
+
+	log.Printf("INFO: Fetching top %d posts from r/%s for time frame: %s", defaultPostLimit, subreddit, defaultTimeFrame)
+
+	url := fmt.Sprintf("%s/r/%s/top?t=%s&limit=%d", redditBaseURL, subreddit, defaultTimeFrame, defaultPostLimit)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", agent)
+	req.Header.Set("User-Agent", "SubTrends/1.0")
 
 	resp, err := makeRequest(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch top posts: %v", err)
+		return nil, fmt.Errorf("failed to fetch posts: %w", err)
 	}
 	defer resp.Body.Close()
 
-	var redditResponse RedditResponse
-	if err := json.NewDecoder(resp.Body).Decode(&redditResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse top posts response: %v", err)
+	var redditResp RedditResponse
+	if err := json.NewDecoder(resp.Body).Decode(&redditResp); err != nil {
+		return nil, fmt.Errorf("failed to decode posts response: %w", err)
 	}
 
-	var posts []RedditPost
-	for _, child := range redditResponse.Data.Children {
+	posts := make([]RedditPost, 0, len(redditResp.Data.Children))
+	for _, child := range redditResp.Data.Children {
 		posts = append(posts, child.Data)
 	}
 
-	log.Printf("INFO: Successfully fetched %d top posts", len(posts))
+	if len(posts) == 0 {
+		return nil, fmt.Errorf("no posts found in r/%s", subreddit)
+	}
+
+	log.Printf("INFO: Successfully fetched %d posts from r/%s", len(posts), subreddit)
 	return posts, nil
 }
 
-// fetchTopComments retrieves the top comments for a specific post
+// fetchTopComments fetches top comments for a post
 func fetchTopComments(permalink, token string) ([]string, error) {
-	log.Printf("INFO: Fetching top comments for post: %s", permalink)
+	if permalink == "" {
+		return nil, fmt.Errorf("permalink is required")
+	}
 
-	agent := os.Getenv("REDDIT_USER_AGENT")
-	url := fmt.Sprintf("%s%s.json?limit=%d", redditBaseURL, permalink, 100)
+	// Ensure permalink starts with /
+	if !strings.HasPrefix(permalink, "/") {
+		permalink = "/" + permalink
+	}
+
+	// Remove trailing slash if present
+	permalink = strings.TrimSuffix(permalink, "/")
+
+	log.Printf("INFO: Fetching top %d comments for post: %s", defaultCommentLimit, permalink)
+
+	url := fmt.Sprintf("%s%s.json?limit=%d", redditBaseURL, permalink, defaultCommentLimit)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", agent)
+	req.Header.Set("User-Agent", "SubTrends/1.0")
 
 	resp, err := makeRequest(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch comments: %v", err)
+		return nil, fmt.Errorf("failed to fetch comments: %w", err)
 	}
 	defer resp.Body.Close()
 
-	var comments []RedditComment
-	if err := json.NewDecoder(resp.Body).Decode(&comments); err != nil {
-		return nil, fmt.Errorf("failed to parse comments response: %v", err)
+	var commentData []interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&commentData); err != nil {
+		return nil, fmt.Errorf("failed to decode comments response: %w", err)
 	}
 
-	var topComments []string
-	if len(comments) > 1 {
-		var allComments []struct {
-			Body string
-			Ups  int
-		}
-
-		// Extract all non-empty comments
-		for _, child := range comments[1].Data.Children {
-			if child.Data.Body != "" {
-				allComments = append(allComments, struct {
-					Body string
-					Ups  int
-				}{
-					Body: child.Data.Body,
-					Ups:  child.Data.Ups,
-				})
-			}
-		}
-
-		// Sort comments by upvotes in descending order
-		for i := 0; i < len(allComments)-1; i++ {
-			for j := 0; j < len(allComments)-i-1; j++ {
-				if allComments[j].Ups < allComments[j+1].Ups {
-					allComments[j], allComments[j+1] = allComments[j+1], allComments[j]
-				}
-			}
-		}
-
-		// Take top comments based on defaultCommentLimit
-		for i := 0; i < len(allComments) && i < defaultCommentLimit; i++ {
-			topComments = append(topComments, allComments[i].Body)
-		}
+	if len(commentData) < 2 {
+		return nil, fmt.Errorf("unexpected comment data format")
 	}
 
-	log.Printf("INFO: Successfully fetched %d top comments: %s", len(topComments), permalink)
-	return topComments, nil
+	// Extract comments from the second element which contains the comments
+	commentsRaw, ok := commentData[1].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid comment data format")
+	}
+
+	commentsData, ok := commentsRaw["data"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid comment data structure")
+	}
+
+	children, ok := commentsData["children"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid children data structure")
+	}
+
+	comments := make([]string, 0, len(children))
+	for _, child := range children {
+		childMap, ok := child.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		childData, ok := childMap["data"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		body, ok := childData["body"].(string)
+		if !ok || body == "" {
+			continue
+		}
+
+		comments = append(comments, body)
+	}
+
+	log.Printf("INFO: Successfully fetched %d comments for post: %s", len(comments), permalink)
+	return comments, nil
 }
 
-// subredditData aggregates data from a subreddit including posts and their top comments
+// subredditData fetches data from a subreddit and formats it for summarization
 func subredditData(subreddit, token string) (string, error) {
+	log.Printf("INFO: Starting data collection for subreddit: r/%s", strings.TrimPrefix(subreddit, "r/"))
 
-	output := ""
 	posts, err := fetchTopPosts(subreddit, token)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch posts: %v", err)
+		return "", fmt.Errorf("failed to fetch posts: %w", err)
 	}
 
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("# Top posts from r/%s\n\n", strings.TrimPrefix(subreddit, "r/")))
+
+	// Process each post with a limit on concurrent requests
 	var wg sync.WaitGroup
-	var mu sync.Mutex
+	semaphore := make(chan struct{}, 3) // Limit concurrent requests
+	commentsMutex := sync.Mutex{}
+	postsWithComments := make(map[int][]string)
+	errChan := make(chan error, len(posts))
+
+	log.Printf("INFO: Fetching comments for %d posts with max concurrency of 3", len(posts))
 
 	for i, post := range posts {
-		mu.Lock()
-		output += fmt.Sprintf("Post %d: %s\n", i+1, post.Title)
-		output += fmt.Sprintf("Upvotes: %d\n", post.Ups)
-		if post.Selftext != "" {
-			output += fmt.Sprintf("Content: %s\n", post.Selftext)
-		}
-		output += fmt.Sprintln("Top Comments:")
-		mu.Unlock()
-
 		wg.Add(1)
-		go func(post RedditPost, index int) {
+		go func(i int, post RedditPost) {
 			defer wg.Done()
 
-			topComments, err := fetchTopComments(post.Permalink, token)
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			log.Printf("INFO: Processing post %d: %s", i+1, post.Title)
+			comments, err := fetchTopComments(post.Permalink, token)
 			if err != nil {
-				log.Printf("WARNING: Failed to fetch comments for post %d: %v", index+1, err)
+				errChan <- fmt.Errorf("failed to fetch comments for post %d: %w", i, err)
 				return
 			}
 
-			mu.Lock()
-			for j, comment := range topComments {
-				output += fmt.Sprintf("\t%d. %s\n", j+1, comment)
-			}
-			mu.Unlock()
-		}(post, i)
+			commentsMutex.Lock()
+			postsWithComments[i] = comments
+			commentsMutex.Unlock()
+			log.Printf("INFO: Completed processing post %d with %d comments", i+1, len(comments))
+		}(i, post)
 	}
 
+	// Wait for all goroutines to complete
 	wg.Wait()
-	return output, nil
+	close(errChan)
+
+	// Check for errors
+	for err := range errChan {
+		log.Printf("WARNING: %v", err)
+	}
+
+	log.Printf("INFO: Formatting data for %d posts from r/%s", len(posts), strings.TrimPrefix(subreddit, "r/"))
+
+	// Format posts and comments
+	for i, post := range posts {
+		builder.WriteString(fmt.Sprintf("## Post %d: %s\n", i+1, post.Title))
+		builder.WriteString(fmt.Sprintf("Upvotes: %d\n\n", post.Ups))
+
+		if post.Selftext != "" {
+			// Include full post content without truncation
+			builder.WriteString(fmt.Sprintf("%s\n\n", post.Selftext))
+		}
+
+		// Add comments if available
+		comments, ok := postsWithComments[i]
+		if ok && len(comments) > 0 {
+			builder.WriteString("### Top Comments:\n")
+			for j, comment := range comments {
+				if j >= defaultCommentLimit {
+					break
+				}
+
+				// Include full comment without truncation
+				builder.WriteString(fmt.Sprintf("- %s\n", comment))
+			}
+			builder.WriteString("\n")
+		}
+	}
+
+	log.Printf("INFO: Completed data collection for r/%s with %d posts", strings.TrimPrefix(subreddit, "r/"), len(posts))
+	return builder.String(), nil
 }

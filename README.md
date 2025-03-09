@@ -98,3 +98,16 @@ Built with ❤️ using:
 - And lots of coffee ☕
 
 Remember: With great power comes great responsibility. Use this bot wisely, and happy trending! 🚀
+
+## Recent Improvements
+
+- Added graceful shutdown with context cancellation
+- Implemented proper error handling with custom error types
+- Added configuration via environment variables with defaults
+- Improved logging with more context
+- Added request timeouts for all API calls
+- Implemented better caching for Reddit tokens with mutex protection
+- Added rate limiting for API requests to prevent throttling
+- Improved code organization with better separation of concerns
+- Enhanced error messages for better debugging
+- Added concurrent processing of Reddit posts with semaphore limiting
