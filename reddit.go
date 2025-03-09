@@ -41,6 +41,9 @@ var (
 
 	// Rate limiter
 	redditLimiter = rate.NewLimiter(rate.Limit(requestsPerSecond), burstSize)
+
+	// User agent for Reddit API requests
+	redditUserAgent = getEnvOrDefault("REDDIT_USER_AGENT", "SubTrends/1.0")
 )
 
 // RedditTokenResponse represents the OAuth token response from Reddit
@@ -149,7 +152,7 @@ func getRedditAccessToken() (string, error) {
 	}
 
 	req.SetBasicAuth(clientID, clientSecret)
-	req.Header.Set("User-Agent", "SubTrends/1.0")
+	req.Header.Set("User-Agent", redditUserAgent)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := makeRequest(req)
@@ -193,7 +196,7 @@ func fetchTopPosts(subreddit, token string) ([]RedditPost, error) {
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", "SubTrends/1.0")
+	req.Header.Set("User-Agent", redditUserAgent)
 
 	resp, err := makeRequest(req)
 	if err != nil {
@@ -242,7 +245,7 @@ func fetchTopComments(permalink, token string) ([]string, error) {
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", "SubTrends/1.0")
+	req.Header.Set("User-Agent", redditUserAgent)
 
 	resp, err := makeRequest(req)
 	if err != nil {
@@ -357,18 +360,18 @@ func subredditData(subreddit, token string) (string, error) {
 
 	// Format posts and comments
 	for i, post := range posts {
-		builder.WriteString(fmt.Sprintf("## 📌 Post %d: %s\n", i+1, post.Title))
-		builder.WriteString(fmt.Sprintf("👍 Upvotes: %d\n\n", post.Ups))
+		builder.WriteString(fmt.Sprintf("## Post %d: %s\n", i+1, post.Title))
+		builder.WriteString(fmt.Sprintf("Upvotes: %d\n\n", post.Ups))
 
 		if post.Selftext != "" {
 			// Include full post content without truncation
-			builder.WriteString(fmt.Sprintf("📝 Content:\n%s\n\n", post.Selftext))
+			builder.WriteString(fmt.Sprintf("Content:\n%s\n\n", post.Selftext))
 		}
 
 		// Add comments if available
 		comments, ok := postsWithComments[i]
 		if ok && len(comments) > 0 {
-			builder.WriteString("💬 Top Comments:\n")
+			builder.WriteString("Top Comments:\n")
 			for j, comment := range comments {
 				if j >= defaultCommentLimit {
 					break
