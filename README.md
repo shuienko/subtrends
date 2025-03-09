@@ -14,7 +14,6 @@ SubTrends Bot is your personal Reddit trend analyzer that combines the power of:
 
 - 🎯 Get instant summaries of any subreddit's hottest discussions
 - 🧠 AI-powered analysis of community trends and sentiments
-- 📚 Keep track of your last 10 subreddit queries
 - 🔒 Single-user mode for your personal use
 - 🤹 Handles text posts, discussions, and top comments
 
@@ -50,8 +49,7 @@ AUTHORIZED_USER_ID=your_telegram_user_id
 3. Build and run with Docker:
 ```bash
 docker build -t subtrends-bot .
-docker volume create subtrends_volume
-docker run -d --env-file .env -v subtrends_volume:/app/data --name subtrends-bot subtrends-bot
+docker run -d --env-file .env --name subtrends-bot subtrends-bot
 ```
 
 ## 🎮 Usage
@@ -59,19 +57,15 @@ docker run -d --env-file .env -v subtrends_volume:/app/data --name subtrends-bot
 1. Start a chat with your bot on Telegram
 2. Send any subreddit name (without r/), for example: `programming`
 3. Wait for the magic to happen! ✨
-4. Use `/history` to see your recent queries
 
 ## 💡 Pro Tips
 
-- The bot remembers your last 10 queries for quick access
-- Click on history items to get fresh summaries
 - Summaries include popular opinions and community sentiment
 - Each summary is crafted by Claude AI for human-like understanding
 
 ## 🔧 Technical Details
 
 - Built with Go 1.21+
-- Uses SQLite for history storage
 - Implements Reddit API rate limiting
 - Secure single-user authentication
 - Docker-ready with Alpine Linux base
@@ -90,7 +84,6 @@ Found a bug? Want to add a feature? PRs are welcome! Just:
 - Single user per bot instance
 - Reddit API rate limits apply
 - Claude API token required
-- Maximum 10 items in history
 
 ## 📜 License
 
@@ -102,7 +95,6 @@ Built with ❤️ using:
 - Go-Telegram-Bot-API
 - Claude AI by Anthropic
 - Reddit API
-- SQLite
 - And lots of coffee ☕
 
 Remember: With great power comes great responsibility. Use this bot wisely, and happy trending! 🚀

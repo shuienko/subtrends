@@ -19,7 +19,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer bot.db.Close()
 
 	// Start bot
 	updateConfig := tgbotapi.NewUpdate(0)

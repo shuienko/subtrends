@@ -1,23 +1,15 @@
 package main
 
 import (
-	"database/sql"
 	"log"
 	"os"
 	"strconv"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	_ "github.com/mattn/go-sqlite3"
-)
-
-const (
-	dbPath     = "data/subtrends.db"
-	maxHistory = 10
 )
 
 type Bot struct {
 	api    *tgbotapi.BotAPI
-	db     *sql.DB
 	logger *log.Logger
 }
 
@@ -27,75 +19,12 @@ func NewBot(token string) (*Bot, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create messages table if not exists with UNIQUE constraint
-	_, err = db.Exec(`
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            message_text TEXT NOT NULL UNIQUE,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    `)
-	if err != nil {
-		return nil, err
-	}
-
 	logger := log.New(os.Stdout, "TelegramBot: ", log.LstdFlags)
 
 	return &Bot{
 		api:    api,
-		db:     db,
 		logger: logger,
 	}, nil
-}
-
-func (b *Bot) saveMessage(text string) error {
-	// Use INSERT OR REPLACE to handle duplicates
-	_, err := b.db.Exec(`
-        INSERT OR REPLACE INTO messages (message_text, timestamp) 
-        VALUES (?, CURRENT_TIMESTAMP)
-    `, text)
-	if err != nil {
-		return err
-	}
-
-	// Keep only last N unique messages
-	_, err = b.db.Exec(`
-        DELETE FROM messages 
-        WHERE id NOT IN (
-            SELECT id FROM messages 
-            ORDER BY timestamp DESC 
-            LIMIT ?
-        )
-    `, maxHistory)
-	return err
-}
-
-func (b *Bot) getHistory() ([]string, error) {
-	rows, err := b.db.Query(`
-        SELECT message_text 
-        FROM messages 
-        ORDER BY timestamp DESC 
-        LIMIT ?
-    `, maxHistory)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var messages []string
-	for rows.Next() {
-		var text string
-		if err := rows.Scan(&text); err != nil {
-			return nil, err
-		}
-		messages = append(messages, text)
-	}
-	return messages, nil
 }
 
 func (b *Bot) handleMessage(message *tgbotapi.Message) error {
@@ -113,31 +42,6 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) error {
 		return err
 	}
 
-	if message.Text == "/history" {
-		history, err := b.getHistory()
-		if err != nil {
-			return err
-		}
-
-		// Create inline keyboard with message history (2 columns)
-		var buttons [][]tgbotapi.InlineKeyboardButton
-		for i := 0; i < len(history); i += 2 {
-			row := []tgbotapi.InlineKeyboardButton{
-				tgbotapi.NewInlineKeyboardButtonData(history[i][:min(40, len(history[i]))], history[i]),
-			}
-			if i+1 < len(history) {
-				row = append(row, tgbotapi.NewInlineKeyboardButtonData(history[i+1][:min(40, len(history[i+1]))], history[i+1]))
-			}
-			buttons = append(buttons, row)
-		}
-
-		keyboard := tgbotapi.NewInlineKeyboardMarkup(buttons...)
-		reply := tgbotapi.NewMessage(message.Chat.ID, "HISTORY:")
-		reply.ReplyMarkup = keyboard
-		_, err = b.api.Send(reply)
-		return err
-	}
-
 	// Handle regular message
 	token, err := getRedditAccessToken()
 	if err != nil {
@@ -150,10 +54,6 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) error {
 	}
 	summary, err := summarizePosts(data)
 	if err != nil {
-		return err
-	}
-
-	if err := b.saveMessage(message.Text); err != nil {
 		return err
 	}
 
@@ -184,11 +84,4 @@ func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) error {
 	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, summary)
 	_, err = b.api.Send(msg)
 	return err
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
