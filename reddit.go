@@ -309,7 +309,8 @@ func subredditData(subreddit, token string) (string, error) {
 	}
 
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("# Top posts from r/%s\n\n", strings.TrimPrefix(subreddit, "r/")))
+	cleanSubredditName := strings.TrimPrefix(subreddit, "r/")
+	builder.WriteString(fmt.Sprintf("# Top posts from r/%s\n\n", cleanSubredditName))
 
 	// Process each post with a limit on concurrent requests
 	var wg sync.WaitGroup
@@ -352,22 +353,22 @@ func subredditData(subreddit, token string) (string, error) {
 		log.Printf("WARNING: %v", err)
 	}
 
-	log.Printf("INFO: Formatting data for %d posts from r/%s", len(posts), strings.TrimPrefix(subreddit, "r/"))
+	log.Printf("INFO: Formatting data for %d posts from r/%s", len(posts), cleanSubredditName)
 
 	// Format posts and comments
 	for i, post := range posts {
-		builder.WriteString(fmt.Sprintf("## Post %d: %s\n", i+1, post.Title))
-		builder.WriteString(fmt.Sprintf("Upvotes: %d\n\n", post.Ups))
+		builder.WriteString(fmt.Sprintf("## 📌 Post %d: %s\n", i+1, post.Title))
+		builder.WriteString(fmt.Sprintf("👍 Upvotes: %d\n\n", post.Ups))
 
 		if post.Selftext != "" {
 			// Include full post content without truncation
-			builder.WriteString(fmt.Sprintf("%s\n\n", post.Selftext))
+			builder.WriteString(fmt.Sprintf("📝 Content:\n%s\n\n", post.Selftext))
 		}
 
 		// Add comments if available
 		comments, ok := postsWithComments[i]
 		if ok && len(comments) > 0 {
-			builder.WriteString("### Top Comments:\n")
+			builder.WriteString("💬 Top Comments:\n")
 			for j, comment := range comments {
 				if j >= defaultCommentLimit {
 					break
@@ -378,8 +379,13 @@ func subredditData(subreddit, token string) (string, error) {
 			}
 			builder.WriteString("\n")
 		}
+
+		// Add a separator between posts for better readability
+		if i < len(posts)-1 {
+			builder.WriteString("----------------------------\n\n")
+		}
 	}
 
-	log.Printf("INFO: Completed data collection for r/%s with %d posts", strings.TrimPrefix(subreddit, "r/"), len(posts))
+	log.Printf("INFO: Completed data collection for r/%s with %d posts", cleanSubredditName, len(posts))
 	return builder.String(), nil
 }

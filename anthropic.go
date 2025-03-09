@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -27,12 +28,12 @@ const (
 	envAnthropicModel  = "ANTHROPIC_MODEL"
 
 	// Request parameters
-	defaultMaxTokens   = 1000
+	defaultMaxTokens   = 1500
 	defaultTemperature = 0.7
-	requestTimeout     = 30 * time.Second
+	requestTimeout     = 45 * time.Second
 
 	// Output formatting
-	summaryHeader = "=== Claude's Summary ===\n"
+	summaryHeader = "📱 *REDDIT PULSE* 📱\n\n"
 
 	// Rate limiting
 	anthropicRequestsPerMinute = 10
@@ -40,16 +41,25 @@ const (
 )
 
 // promptTemplate defines the template for the summarization request
-const promptTemplate = `Please provide a concise summary of these Reddit posts and discussions. 
+const promptTemplate = `Please provide an engaging and fun summary of these Reddit posts and discussions from r/%s. 
+
 Focus on:
-- Main themes and topics; group similar topics together if possible
-- Key points from popular comments
-- Notable trends or patterns
-- Overall community sentiment
+- Main themes and topics; group similar topics together
+- Key points from popular comments with interesting insights
+- Notable trends, patterns, or controversies
+- Overall community sentiment and mood
+
+Format your response with:
+- 📊 TRENDING TOPICS: List the main themes with emoji indicators
+- 💬 COMMUNITY PULSE: Describe the overall sentiment and notable discussions
+- 🔥 HOT TAKES: Highlight the most interesting or controversial opinions
 
 Rules:
-- Don't reply with anything but summary.
-- Don't reply with the summary for each post. You must cover themes, trends and key points.
+- Be conversational and engaging, like you're telling a friend about what's happening on Reddit
+- Use appropriate emojis to make the summary more visually appealing
+- Don't reply with the summary for each post individually
+- Keep your tone friendly and slightly humorous where appropriate
+- Organize information in a clear, scannable format with bullet points and sections
 
 Posts to analyze:
 
@@ -126,8 +136,21 @@ func getRequiredEnvVar(key string) (string, error) {
 
 // createAnthropicRequest creates a request structure for the Anthropic API
 func createAnthropicRequest(model, text string) AnthropicRequest {
-	// Format the prompt with the Reddit data
-	prompt := fmt.Sprintf(promptTemplate, text)
+	// Extract subreddit name from the text
+	subredditName := "unknown"
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "# Top posts from r/") {
+			parts := strings.Split(line, "r/")
+			if len(parts) > 1 {
+				subredditName = strings.TrimSpace(parts[1])
+				break
+			}
+		}
+	}
+
+	// Format the prompt with the Reddit data and subreddit name
+	prompt := fmt.Sprintf(promptTemplate, subredditName, text)
 
 	// Create the request structure
 	return AnthropicRequest{
@@ -218,6 +241,16 @@ func formatResponse(response *AnthropicResponse) (string, error) {
 	text := response.Content[0].Text
 	if text == "" {
 		return "", fmt.Errorf("empty text in response content")
+	}
+
+	// Ensure proper Markdown formatting
+	// Replace any instances of * that aren't part of Markdown formatting
+	// This is a simple approach - a more robust solution would use regex
+	if !strings.Contains(text, "*") {
+		// If there are no asterisks, add some basic formatting
+		text = strings.ReplaceAll(text, "TRENDING TOPICS", "*TRENDING TOPICS*")
+		text = strings.ReplaceAll(text, "COMMUNITY PULSE", "*COMMUNITY PULSE*")
+		text = strings.ReplaceAll(text, "HOT TAKES", "*HOT TAKES*")
 	}
 
 	// Format the response with a header

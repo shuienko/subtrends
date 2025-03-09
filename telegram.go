@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -125,70 +126,173 @@ func (b *Bot) Stop(ctx context.Context) error {
 func (b *Bot) handleMessage(message *tgbotapi.Message) error {
 	// Check if user is authorized
 	if message.From.ID != b.config.AuthorizedUserID {
-		reply := tgbotapi.NewMessage(message.Chat.ID, "Unauthorized user")
+		reply := tgbotapi.NewMessage(message.Chat.ID, "⛔ Sorry, you're not authorized to use this bot.")
 		_, err := b.api.Send(reply)
 		return err
 	}
 
-	// Handle regular message
+	// Handle commands
+	if message.IsCommand() {
+		return b.handleCommand(message)
+	}
+
+	// Handle regular message (subreddit name)
+	subredditName := message.Text
+
+	// Send typing action to show the bot is processing
+	typingAction := tgbotapi.NewChatAction(message.Chat.ID, tgbotapi.ChatTyping)
+	_, _ = b.api.Send(typingAction)
+
+	// Send initial processing message
+	processingMsg := tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("🔍 Analyzing r/%s...\nThis might take a moment to fetch and process the data.", strings.TrimPrefix(subredditName, "r/")))
+	sentMsg, _ := b.api.Send(processingMsg)
+
+	// Get Reddit data
 	token, err := getRedditAccessToken()
 	if err != nil {
 		b.logger.Printf("Failed to get access token: %v", err)
-		reply := tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("Error: %v", err))
-		_, _ = b.api.Send(reply)
+		errorMsg := tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("❌ Error: Failed to connect to Reddit. Please try again later.\n\nTechnical details: %v", err))
+		_, _ = b.api.Send(errorMsg)
 		return err
 	}
 
-	data, err := subredditData(message.Text, token)
+	// Update processing message
+	editMsg := tgbotapi.NewEditMessageText(message.Chat.ID, sentMsg.MessageID, fmt.Sprintf("🔍 Connected to Reddit! Fetching posts from r/%s...", strings.TrimPrefix(subredditName, "r/")))
+	_, _ = b.api.Send(editMsg)
+
+	data, err := subredditData(subredditName, token)
 	if err != nil {
-		reply := tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("Error: %v", err))
-		_, _ = b.api.Send(reply)
+		errorMsg := tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("❌ Error: %v", err))
+		_, _ = b.api.Send(errorMsg)
 		return err
 	}
+
+	// Update processing message
+	editMsg = tgbotapi.NewEditMessageText(message.Chat.ID, sentMsg.MessageID, "🧠 Analyzing Reddit posts and generating summary...")
+	_, _ = b.api.Send(editMsg)
 
 	summary, err := summarizePosts(data)
 	if err != nil {
-		reply := tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("Error: %v", err))
-		_, _ = b.api.Send(reply)
+		errorMsg := tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("❌ Error: Failed to generate summary.\n\nTechnical details: %v", err))
+		_, _ = b.api.Send(errorMsg)
 		return err
 	}
 
+	// Delete the processing message
+	deleteMsg := tgbotapi.NewDeleteMessage(message.Chat.ID, sentMsg.MessageID)
+	_, _ = b.api.Send(deleteMsg)
+
+	// Send the summary
 	reply := tgbotapi.NewMessage(message.Chat.ID, summary)
+	reply.ParseMode = "Markdown"
 	_, err = b.api.Send(reply)
+
 	return err
 }
 
+// handleCommand processes bot commands
+func (b *Bot) handleCommand(message *tgbotapi.Message) error {
+	switch message.Command() {
+	case "start":
+		welcomeText := `👋 *Welcome to SubTrends Bot!*
+
+I help you stay updated on what's trending in your favorite subreddits.
+
+*How to use me:*
+Simply send me a subreddit name (with or without "r/") and I'll analyze the top posts and comments to give you a concise summary of what's happening there.
+
+For example, try sending: 
+- r/technology
+- science
+- askreddit
+
+Let's get started!`
+
+		msg := tgbotapi.NewMessage(message.Chat.ID, welcomeText)
+		msg.ParseMode = "Markdown"
+		_, err := b.api.Send(msg)
+		return err
+
+	case "help":
+		helpText := `*SubTrends Bot Help*
+
+*Basic Commands:*
+/start - Start the bot and see welcome message
+/help - Show this help message
+
+*How to use:*
+Just send any subreddit name (with or without "r/") to get a summary of what's trending there.
+
+*Examples:*
+- r/worldnews
+- datascience
+- askhistorians
+
+The bot will analyze the top posts and comments from the past day and provide you with a concise, organized summary.`
+
+		msg := tgbotapi.NewMessage(message.Chat.ID, helpText)
+		msg.ParseMode = "Markdown"
+		_, err := b.api.Send(msg)
+		return err
+
+	default:
+		msg := tgbotapi.NewMessage(message.Chat.ID, "Unknown command. Try /help to see available commands.")
+		_, err := b.api.Send(msg)
+		return err
+	}
+}
+
 func (b *Bot) handleCallback(callback *tgbotapi.CallbackQuery) error {
+	// Send typing action to show the bot is processing
+	typingAction := tgbotapi.NewChatAction(callback.Message.Chat.ID, tgbotapi.ChatTyping)
+	_, _ = b.api.Send(typingAction)
+
+	// Answer the callback query to stop the loading animation on the button
+	callbackAnswer := tgbotapi.NewCallback(callback.ID, "")
+	_, _ = b.api.Request(callbackAnswer)
+
+	// Send initial processing message
+	processingMsg := tgbotapi.NewMessage(callback.Message.Chat.ID, fmt.Sprintf("🔍 Analyzing r/%s...\nThis might take a moment to fetch and process the data.", strings.TrimPrefix(callback.Data, "r/")))
+	sentMsg, _ := b.api.Send(processingMsg)
+
 	// Get Reddit data using the callback data (subreddit name)
 	token, err := getRedditAccessToken()
 	if err != nil {
 		b.logger.Printf("Failed to get access token: %v", err)
-		reply := tgbotapi.NewMessage(callback.Message.Chat.ID, fmt.Sprintf("Error: %v", err))
-		_, _ = b.api.Send(reply)
+		errorMsg := tgbotapi.NewMessage(callback.Message.Chat.ID, fmt.Sprintf("❌ Error: Failed to connect to Reddit. Please try again later.\n\nTechnical details: %v", err))
+		_, _ = b.api.Send(errorMsg)
 		return err
 	}
+
+	// Update processing message
+	editMsg := tgbotapi.NewEditMessageText(callback.Message.Chat.ID, sentMsg.MessageID, fmt.Sprintf("🔍 Connected to Reddit! Fetching posts from r/%s...", strings.TrimPrefix(callback.Data, "r/")))
+	_, _ = b.api.Send(editMsg)
 
 	data, err := subredditData(callback.Data, token)
 	if err != nil {
-		reply := tgbotapi.NewMessage(callback.Message.Chat.ID, fmt.Sprintf("Error: %v", err))
-		_, _ = b.api.Send(reply)
+		errorMsg := tgbotapi.NewMessage(callback.Message.Chat.ID, fmt.Sprintf("❌ Error: %v", err))
+		_, _ = b.api.Send(errorMsg)
 		return err
 	}
+
+	// Update processing message
+	editMsg = tgbotapi.NewEditMessageText(callback.Message.Chat.ID, sentMsg.MessageID, "🧠 Analyzing Reddit posts and generating summary...")
+	_, _ = b.api.Send(editMsg)
 
 	summary, err := summarizePosts(data)
 	if err != nil {
-		reply := tgbotapi.NewMessage(callback.Message.Chat.ID, fmt.Sprintf("Error: %v", err))
-		_, _ = b.api.Send(reply)
+		errorMsg := tgbotapi.NewMessage(callback.Message.Chat.ID, fmt.Sprintf("❌ Error: Failed to generate summary.\n\nTechnical details: %v", err))
+		_, _ = b.api.Send(errorMsg)
 		return err
 	}
 
-	// Send the summary to the user
-	msg := tgbotapi.NewMessage(callback.Message.Chat.ID, summary)
-	_, err = b.api.Send(msg)
+	// Delete the processing message
+	deleteMsg := tgbotapi.NewDeleteMessage(callback.Message.Chat.ID, sentMsg.MessageID)
+	_, _ = b.api.Send(deleteMsg)
 
-	// Answer the callback query to remove the loading indicator
-	callback_response := tgbotapi.NewCallback(callback.ID, "")
-	_, _ = b.api.Request(callback_response)
-
+	// Send the summary
+	reply := tgbotapi.NewMessage(callback.Message.Chat.ID, summary)
+	reply.ParseMode = "Markdown"
+	_, err = b.api.Send(reply)
 	return err
 }
