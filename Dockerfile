@@ -1,12 +1,6 @@
 # Build stage
 FROM golang:1.23-alpine AS builder
 
-# Install build dependencies and SQLite
-RUN apk add --no-cache \
-    gcc \
-    musl-dev \
-    sqlite-dev
-
 # Set working directory
 WORKDIR /app
 
@@ -19,14 +13,11 @@ RUN go mod download
 # Copy the source code
 COPY . .
 
-# Build the application with static linking
-RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflags "-static"' -o bot .
+# Build the application
+RUN go build -o bot .
 
 # Final stage
 FROM alpine:3.19
-
-# Install only SQLite runtime libraries
-RUN apk add --no-cache sqlite-libs
 
 # Set working directory
 WORKDIR /app

@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,9 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -24,28 +28,47 @@ const (
 	envAnthropicModel  = "ANTHROPIC_MODEL"
 
 	// Request parameters
-	defaultMaxTokens   = 1000
+	defaultMaxTokens   = 1500
 	defaultTemperature = 0.7
+	requestTimeout     = 45 * time.Second
 
 	// Output formatting
-	summaryHeader = "=== Claude's Summary ===\n"
+	summaryHeader = "📱 *REDDIT PULSE* 📱\n\n"
+
+	// Rate limiting
+	anthropicRequestsPerMinute = 10
+	anthropicBurstSize         = 3
 )
 
 // promptTemplate defines the template for the summarization request
-const promptTemplate = `Please provide a concise summary of these Reddit posts and discussions. 
+const promptTemplate = `Please provide an engaging and fun summary of these Reddit posts and discussions from r/%s. 
+
 Focus on:
-- Main themes and topics; group similar topics together if possible
-- Key points from popular comments
-- Notable trends or patterns
-- Overall community sentiment
+- Main themes and topics; group similar topics together
+- Key points from popular comments with interesting insights
+- Notable trends, patterns, or controversies
+- Overall community sentiment and mood
+
+Format your response with:
+- 📊 TRENDING TOPICS: List the main themes with emoji indicators
+- 💬 COMMUNITY PULSE: Describe the overall sentiment and notable discussions
+- 🔥 HOT TAKES: Highlight the most interesting or controversial opinions
 
 Rules:
-- Don't reply with anything but summary.
-- Don't reply with the summary for each post. You must cover themes, trends and key points.
+- Be conversational and engaging, like you're telling a friend about what's happening on Reddit
+- Use appropriate emojis to make the summary more visually appealing
+- Don't reply with the summary for each post individually
+- Keep your tone friendly and slightly humorous where appropriate
+- Organize information in a clear, scannable format with bullet points and sections
 
 Posts to analyze:
 
 %s`
+
+var (
+	// Rate limiter for Anthropic API
+	anthropicLimiter = rate.NewLimiter(rate.Limit(anthropicRequestsPerMinute/60), anthropicBurstSize)
+)
 
 // Message represents a single message in the conversation with Claude
 type Message struct {
@@ -86,10 +109,14 @@ func summarizePosts(text string) (string, error) {
 	// Prepare the API request
 	request := createAnthropicRequest(model, text)
 
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+
 	// Make the API call
-	response, err := makeAnthropicAPICall(request, apiKey)
+	response, err := makeAnthropicAPICall(ctx, request, apiKey)
 	if err != nil {
-		return "", fmt.Errorf("API call failed: %v", err)
+		return "", fmt.Errorf("API call failed: %w", err)
 	}
 
 	// Format and return the response
@@ -97,30 +124,41 @@ func summarizePosts(text string) (string, error) {
 }
 
 // getEnvOrDefault returns the value of an environment variable or a default value if not set
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
 
 // getRequiredEnvVar returns the value of a required environment variable or an error if not set
 func getRequiredEnvVar(key string) (string, error) {
 	value := os.Getenv(key)
 	if value == "" {
-		return "", fmt.Errorf("%s environment variable is not set", key)
+		return "", ErrMissingEnvVar(key)
 	}
 	return value, nil
 }
 
-// createAnthropicRequest creates a new request structure for the Anthropic API
+// createAnthropicRequest creates a request structure for the Anthropic API
 func createAnthropicRequest(model, text string) AnthropicRequest {
+	// Extract subreddit name from the text
+	subredditName := "unknown"
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "# Top posts from r/") {
+			parts := strings.Split(line, "r/")
+			if len(parts) > 1 {
+				subredditName = strings.TrimSpace(parts[1])
+				break
+			}
+		}
+	}
+
+	// Format the prompt with the Reddit data and subreddit name
+	prompt := fmt.Sprintf(promptTemplate, subredditName, text)
+
+	// Create the request structure
 	return AnthropicRequest{
 		Model: model,
 		Messages: []Message{
 			{
 				Role:    "user",
-				Content: fmt.Sprintf(promptTemplate, text),
+				Content: prompt,
 			},
 		},
 		MaxTokens:   defaultMaxTokens,
@@ -128,60 +166,93 @@ func createAnthropicRequest(model, text string) AnthropicRequest {
 	}
 }
 
-// makeAnthropicAPICall sends the request to the Anthropic API and returns the response
-func makeAnthropicAPICall(request AnthropicRequest, apiKey string) (*AnthropicResponse, error) {
-	// Marshal request to JSON
-	jsonData, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling request: %v", err)
+// makeAnthropicAPICall sends a request to the Anthropic API and returns the response
+func makeAnthropicAPICall(ctx context.Context, request AnthropicRequest, apiKey string) (*AnthropicResponse, error) {
+	// Apply rate limiting
+	if err := anthropicLimiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit wait failed: %w", err)
 	}
 
-	// Create HTTP request
-	req, err := http.NewRequest("POST", anthropicAPIEndpoint, bytes.NewBuffer(jsonData))
+	// Marshal the request to JSON
+	requestBody, err := json.Marshal(request)
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %v", err)
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Create the HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", anthropicAPIEndpoint, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("X-API-Key", apiKey)
 	req.Header.Set("anthropic-version", anthropicAPIVersion)
 
-	// Make the request
-	client := &http.Client{}
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: requestTimeout,
+	}
+
+	// Send the request
+	startTime := time.Now()
 	resp, err := client.Do(req)
+	requestDuration := time.Since(startTime)
+
+	log.Printf("INFO: Anthropic API request completed in %v", requestDuration)
+
 	if err != nil {
-		return nil, fmt.Errorf("error making request: %v", err)
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("ERROR: Error in Anthropic API call: %v", err)
-		return nil, fmt.Errorf("error reading response: %v", err)
+	// Check for HTTP errors
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API returned non-200 status code %d: %s", resp.StatusCode, string(bodyBytes))
 	}
-	log.Printf("INFO: Anthropic API call successful with status: %d", resp.StatusCode)
 
-	// Parse response
+	// Parse the response
 	var response AnthropicResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("error unmarshaling response: %v", err)
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, fmt.Errorf("failed to decode API response: %w", err)
 	}
 
 	// Check for API errors
-	if response.Error != nil {
+	if response.Error != nil && response.Error.Message != "" {
 		return nil, fmt.Errorf("API error: %s", response.Error.Message)
 	}
 
 	return &response, nil
 }
 
-// formatResponse formats the API response into the desired output format
+// formatResponse extracts and formats the text from the Anthropic API response
 func formatResponse(response *AnthropicResponse) (string, error) {
-	if len(response.Content) == 0 {
-		return "", fmt.Errorf("no content in response")
+	if response == nil {
+		return "", fmt.Errorf("nil response received")
 	}
 
-	return summaryHeader + strings.TrimSpace(response.Content[0].Text), nil
+	if len(response.Content) == 0 {
+		return "", fmt.Errorf("empty content in response")
+	}
+
+	// Extract the text from the response
+	text := response.Content[0].Text
+	if text == "" {
+		return "", fmt.Errorf("empty text in response content")
+	}
+
+	// Ensure proper Markdown formatting
+	// Replace any instances of * that aren't part of Markdown formatting
+	// This is a simple approach - a more robust solution would use regex
+	if !strings.Contains(text, "*") {
+		// If there are no asterisks, add some basic formatting
+		text = strings.ReplaceAll(text, "TRENDING TOPICS", "*TRENDING TOPICS*")
+		text = strings.ReplaceAll(text, "COMMUNITY PULSE", "*COMMUNITY PULSE*")
+		text = strings.ReplaceAll(text, "HOT TAKES", "*HOT TAKES*")
+	}
+
+	// Format the response with a header
+	return summaryHeader + text, nil
 }
