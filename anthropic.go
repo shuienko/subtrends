@@ -67,7 +67,7 @@ Posts to analyze:
 
 var (
 	// Rate limiter for Anthropic API
-	anthropicLimiter = rate.NewLimiter(rate.Limit(anthropicRequestsPerMinute/60), anthropicBurstSize)
+	anthropicLimiter = rate.NewLimiter(rate.Every(time.Minute/time.Duration(anthropicRequestsPerMinute)), anthropicBurstSize)
 )
 
 // Message represents a single message in the conversation with Claude
