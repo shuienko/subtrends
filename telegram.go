@@ -321,6 +321,11 @@ func (b *Bot) handleHistoryCommand(message *tgbotapi.Message) error {
 
 // saveToHistory saves a user request to the history
 func (b *Bot) saveToHistory(message *tgbotapi.Message) {
+	// Skip saving the /history command itself
+	if message.IsCommand() && message.Command() == "history" {
+		return
+	}
+
 	b.historyMutex.Lock()
 	defer b.historyMutex.Unlock()
 
