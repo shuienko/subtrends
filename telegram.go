@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -34,6 +35,14 @@ func ErrInvalidEnvVar(varName string, err error) error {
 	return EnvVarError{VarName: varName, Err: err}
 }
 
+// UserRequest represents a user request to the bot
+type UserRequest struct {
+	UserID    int64
+	Username  string
+	Text      string
+	Timestamp time.Time
+}
+
 // Bot represents a Telegram bot with its API client and configuration
 type Bot struct {
 	api      *tgbotapi.BotAPI
@@ -41,6 +50,10 @@ type Bot struct {
 	config   *Config
 	stopChan chan struct{}
 	wg       sync.WaitGroup
+
+	// History of user requests
+	historyMutex sync.RWMutex
+	history      []UserRequest
 }
 
 // NewBot creates a new Bot instance with the provided configuration
@@ -58,6 +71,7 @@ func NewBot(config *Config) (*Bot, error) {
 		logger:   logger,
 		config:   config,
 		stopChan: make(chan struct{}),
+		history:  make([]UserRequest, 0, 50), // Initialize history with capacity for 50 items
 	}, nil
 }
 
@@ -126,6 +140,9 @@ func (b *Bot) handleMessage(message *tgbotapi.Message) error {
 		_, err := b.api.Send(reply)
 		return err
 	}
+
+	// Save the request to history
+	b.saveToHistory(message)
 
 	// Handle commands
 	if message.IsCommand() {
@@ -239,6 +256,7 @@ Let's get started!`
 *Basic Commands:*
 /start - Start the bot and see welcome message
 /help - Show this help message
+/history - Show your last 50 requests
 
 *How to use:*
 Just send any subreddit name (with or without "r/") to get a summary of what's trending there.
@@ -255,9 +273,70 @@ The bot will analyze the top posts and comments from the past day and provide yo
 		_, err := b.api.Send(msg)
 		return err
 
+	case "history":
+		return b.handleHistoryCommand(message)
+
 	default:
 		msg := tgbotapi.NewMessage(message.Chat.ID, "Unknown command. Try /help to see available commands.")
 		_, err := b.api.Send(msg)
 		return err
+	}
+}
+
+// handleHistoryCommand handles the /history command
+func (b *Bot) handleHistoryCommand(message *tgbotapi.Message) error {
+	b.historyMutex.RLock()
+	defer b.historyMutex.RUnlock()
+
+	if len(b.history) == 0 {
+		msg := tgbotapi.NewMessage(message.Chat.ID, "📜 *Request History*\n\nYou haven't made any requests yet.")
+		msg.ParseMode = "Markdown"
+		_, err := b.api.Send(msg)
+		return err
+	}
+
+	// Build the history message
+	var historyText strings.Builder
+	historyText.WriteString("📜 *Your Request History*\n\n")
+
+	// Display the requests in reverse order (newest first)
+	for i := len(b.history) - 1; i >= 0; i-- {
+		request := b.history[i]
+		timeStr := request.Timestamp.Format("Jan 02, 15:04")
+
+		// Format the text based on whether it's a command or not
+		text := request.Text
+		if strings.HasPrefix(text, "/") {
+			historyText.WriteString(fmt.Sprintf("*%s* - Command: `%s`\n", timeStr, text))
+		} else {
+			historyText.WriteString(fmt.Sprintf("*%s* - Subreddit: `%s`\n", timeStr, text))
+		}
+	}
+
+	msg := tgbotapi.NewMessage(message.Chat.ID, historyText.String())
+	msg.ParseMode = "Markdown"
+	_, err := b.api.Send(msg)
+	return err
+}
+
+// saveToHistory saves a user request to the history
+func (b *Bot) saveToHistory(message *tgbotapi.Message) {
+	b.historyMutex.Lock()
+	defer b.historyMutex.Unlock()
+
+	// Create a new request
+	request := UserRequest{
+		UserID:    message.From.ID,
+		Username:  message.From.UserName,
+		Text:      message.Text,
+		Timestamp: time.Now(),
+	}
+
+	// Add to history
+	b.history = append(b.history, request)
+
+	// If we have more than 50 items, remove the oldest
+	if len(b.history) > 50 {
+		b.history = b.history[len(b.history)-50:]
 	}
 }
