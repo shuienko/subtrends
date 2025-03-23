@@ -26,3 +26,4 @@ go.work.sum
 subtrends.db
 .DS_Store
 reddit_token.json
+subreddit_history.txt

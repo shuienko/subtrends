@@ -17,6 +17,7 @@ type Config struct {
 	Debug            bool
 	ShutdownTimeout  time.Duration
 	AnthropicModel   string
+	HistoryFilePath  string
 }
 
 // LoadConfig loads configuration from environment variables
@@ -50,12 +51,16 @@ func LoadConfig() (*Config, error) {
 	// Anthropic model with default
 	anthropicModel := getEnvOrDefault("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
 
+	// History file path with default
+	historyFilePath := getEnvOrDefault("HISTORY_FILE_PATH", "subreddit_history.txt")
+
 	return &Config{
 		TelegramToken:    token,
 		AuthorizedUserID: authorizedUserID,
 		Debug:            debug,
 		ShutdownTimeout:  time.Duration(shutdownTimeout) * time.Second,
 		AnthropicModel:   anthropicModel,
+		HistoryFilePath:  historyFilePath,
 	}, nil
 }
 
