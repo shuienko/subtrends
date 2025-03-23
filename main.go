@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -52,7 +54,7 @@ func LoadConfig() (*Config, error) {
 	anthropicModel := getEnvOrDefault("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
 
 	// History file path with default
-	historyFilePath := getEnvOrDefault("HISTORY_FILE_PATH", "subreddit_history.txt")
+	historyFilePath := getEnvOrDefault("HISTORY_FILE_PATH", "data/subreddit_history.txt")
 
 	return &Config{
 		TelegramToken:    token,
@@ -64,11 +66,33 @@ func LoadConfig() (*Config, error) {
 	}, nil
 }
 
+// ensureDataDirectory creates the data directory if it doesn't exist
+func ensureDataDirectory() error {
+	// Get data directory path from token file path
+	dataDir := filepath.Dir(tokenFilePath)
+
+	// Check if directory exists
+	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
+		log.Printf("Creating data directory: %s", dataDir)
+		// Create directory with permissions
+		if err := os.MkdirAll(dataDir, 0755); err != nil {
+			return fmt.Errorf("failed to create data directory: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func main() {
 	// Load configuration
 	config, err := LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Ensure data directory exists
+	if err := ensureDataDirectory(); err != nil {
+		log.Fatalf("Failed to create data directory: %v", err)
 	}
 
 	// Create bot instance

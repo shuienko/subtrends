@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -31,7 +32,7 @@ const (
 
 	// Token caching
 	tokenExpiryBuffer = 5 * time.Minute
-	tokenFilePath     = "reddit_token.json"
+	tokenFilePath     = "data/reddit_token.json"
 )
 
 var (
@@ -131,6 +132,12 @@ func saveTokenToFile(token string, expiresIn time.Duration) error {
 	data, err := json.MarshalIndent(tokenData, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal token data: %w", err)
+	}
+
+	// Ensure the directory exists
+	dir := filepath.Dir(tokenFilePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory for token file: %w", err)
 	}
 
 	if err := os.WriteFile(tokenFilePath, data, 0644); err != nil {

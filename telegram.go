@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -154,6 +155,12 @@ func (b *Bot) saveHistoryToFile() error {
 
 	// Create the file content
 	content := strings.Join(b.history, "\n")
+
+	// Ensure the directory exists
+	dir := filepath.Dir(b.historyFilePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory for history file: %w", err)
+	}
 
 	// Write to file
 	err := os.WriteFile(b.historyFilePath, []byte(content), 0644)
