@@ -25,3 +25,4 @@ go.work.sum
 .env
 subtrends.db
 .DS_Store
+reddit_token.json

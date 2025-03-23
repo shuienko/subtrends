@@ -43,6 +43,13 @@ type UserRequest struct {
 	Timestamp time.Time
 }
 
+// ModelInfo represents information about an available model
+type ModelInfo struct {
+	Codename    string
+	Name        string
+	Description string
+}
+
 // Bot represents a Telegram bot with its API client and configuration
 type Bot struct {
 	api      *tgbotapi.BotAPI
@@ -54,6 +61,29 @@ type Bot struct {
 	// History of user requests
 	historyMutex sync.RWMutex
 	history      []UserRequest
+
+	// Model selection
+	modelMutex sync.RWMutex
+	model      string
+}
+
+// Available models for selection
+var availableModels = []ModelInfo{
+	{
+		Codename:    "simple",
+		Name:        "claude-3-haiku-20240307",
+		Description: "Fast and efficient model (default)",
+	},
+	{
+		Codename:    "balanced",
+		Name:        "claude-3-sonnet-20240229",
+		Description: "Balanced performance and capabilities",
+	},
+	{
+		Codename:    "advanced",
+		Name:        "claude-3-opus-20240229",
+		Description: "Most capable model for complex tasks",
+	},
 }
 
 // NewBot creates a new Bot instance with the provided configuration
@@ -72,6 +102,7 @@ func NewBot(config *Config) (*Bot, error) {
 		config:   config,
 		stopChan: make(chan struct{}),
 		history:  make([]UserRequest, 0, 50), // Initialize history with capacity for 50 items
+		model:    config.AnthropicModel,      // Initialize model from config
 	}, nil
 }
 
@@ -257,6 +288,7 @@ Let's get started!`
 /start - Start the bot and see welcome message
 /help - Show this help message
 /history - Show your last 50 requests
+/model - Show or change the current AI model
 
 *How to use:*
 Just send any subreddit name (with or without "r/") to get a summary of what's trending there.
@@ -275,6 +307,9 @@ The bot will analyze the top posts and comments from the past day and provide yo
 
 	case "history":
 		return b.handleHistoryCommand(message)
+
+	case "model":
+		return b.handleModelCommand(message)
 
 	default:
 		msg := tgbotapi.NewMessage(message.Chat.ID, "Unknown command. Try /help to see available commands.")
@@ -314,6 +349,76 @@ func (b *Bot) handleHistoryCommand(message *tgbotapi.Message) error {
 	}
 
 	msg := tgbotapi.NewMessage(message.Chat.ID, historyText.String())
+	msg.ParseMode = "Markdown"
+	_, err := b.api.Send(msg)
+	return err
+}
+
+// handleModelCommand handles the /model command
+func (b *Bot) handleModelCommand(message *tgbotapi.Message) error {
+	args := message.CommandArguments()
+	if args == "" {
+		// Show current model
+		b.modelMutex.RLock()
+		currentModel := b.model
+		b.modelMutex.RUnlock()
+
+		var modelText strings.Builder
+		modelText.WriteString("*Current AI Model*\n\n")
+
+		// Find current model info
+		var currentModelInfo ModelInfo
+		for _, model := range availableModels {
+			if model.Name == currentModel {
+				currentModelInfo = model
+				break
+			}
+		}
+		modelText.WriteString(fmt.Sprintf("Currently using: `%s` (%s)\n", currentModelInfo.Codename, currentModelInfo.Description))
+		modelText.WriteString("\n*Available Models:*\n")
+		for _, model := range availableModels {
+			modelText.WriteString(fmt.Sprintf("- `%s`: %s\n", model.Codename, model.Description))
+		}
+		modelText.WriteString("\nTo change the model, use:\n`/model <codename>`")
+
+		msg := tgbotapi.NewMessage(message.Chat.ID, modelText.String())
+		msg.ParseMode = "Markdown"
+		_, err := b.api.Send(msg)
+		return err
+	}
+
+	// Validate model codename
+	var selectedModel ModelInfo
+	validModel := false
+	for _, model := range availableModels {
+		if args == model.Codename {
+			validModel = true
+			selectedModel = model
+			break
+		}
+	}
+
+	if !validModel {
+		var codenames strings.Builder
+		codenames.WriteString("❌ Invalid model codename. Available models:\n")
+		for _, model := range availableModels {
+			codenames.WriteString(fmt.Sprintf("- `%s`: %s\n", model.Codename, model.Description))
+		}
+		msg := tgbotapi.NewMessage(message.Chat.ID, codenames.String())
+		msg.ParseMode = "Markdown"
+		_, err := b.api.Send(msg)
+		return err
+	}
+
+	// Update model
+	b.modelMutex.Lock()
+	b.model = selectedModel.Name
+	b.modelMutex.Unlock()
+
+	// Update environment variable
+	os.Setenv("ANTHROPIC_MODEL", selectedModel.Name)
+
+	msg := tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("✅ Model changed to: `%s` (%s)", selectedModel.Codename, selectedModel.Description))
 	msg.ParseMode = "Markdown"
 	_, err := b.api.Send(msg)
 	return err

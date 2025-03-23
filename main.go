@@ -16,6 +16,7 @@ type Config struct {
 	AuthorizedUserID int64
 	Debug            bool
 	ShutdownTimeout  time.Duration
+	AnthropicModel   string
 }
 
 // LoadConfig loads configuration from environment variables
@@ -46,11 +47,15 @@ func LoadConfig() (*Config, error) {
 		shutdownTimeout = 5 // Default to 5 seconds
 	}
 
+	// Anthropic model with default
+	anthropicModel := getEnvOrDefault("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
+
 	return &Config{
 		TelegramToken:    token,
 		AuthorizedUserID: authorizedUserID,
 		Debug:            debug,
 		ShutdownTimeout:  time.Duration(shutdownTimeout) * time.Second,
+		AnthropicModel:   anthropicModel,
 	}, nil
 }
 
