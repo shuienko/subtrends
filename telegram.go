@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -43,17 +44,48 @@ type UserRequest struct {
 	Timestamp time.Time
 }
 
+// ModelInfo represents information about an available model
+type ModelInfo struct {
+	Codename    string
+	Name        string
+	Description string
+}
+
 // Bot represents a Telegram bot with its API client and configuration
 type Bot struct {
-	api      *tgbotapi.BotAPI
-	logger   *log.Logger
-	config   *Config
-	stopChan chan struct{}
-	wg       sync.WaitGroup
+	api             *tgbotapi.BotAPI
+	logger          *log.Logger
+	config          *Config
+	stopChan        chan struct{}
+	wg              sync.WaitGroup
+	historyFilePath string
 
-	// History of user requests
+	// History of user requests (unique subreddit names)
 	historyMutex sync.RWMutex
-	history      []UserRequest
+	history      []string
+
+	// Model selection
+	modelMutex sync.RWMutex
+	model      string
+}
+
+// Available models for selection
+var availableModels = []ModelInfo{
+	{
+		Codename:    "simple",
+		Name:        "claude-3-haiku-20240307",
+		Description: "Fast and efficient model (default)",
+	},
+	{
+		Codename:    "balanced",
+		Name:        "claude-3-sonnet-20240229",
+		Description: "Balanced performance and capabilities",
+	},
+	{
+		Codename:    "advanced",
+		Name:        "claude-3-opus-20240229",
+		Description: "Most capable model for complex tasks",
+	},
 }
 
 // NewBot creates a new Bot instance with the provided configuration
@@ -66,13 +98,78 @@ func NewBot(config *Config) (*Bot, error) {
 	api.Debug = config.Debug
 	logger := log.New(os.Stdout, "TelegramBot: ", log.LstdFlags)
 
-	return &Bot{
-		api:      api,
-		logger:   logger,
-		config:   config,
-		stopChan: make(chan struct{}),
-		history:  make([]UserRequest, 0, 50), // Initialize history with capacity for 50 items
-	}, nil
+	bot := &Bot{
+		api:             api,
+		logger:          logger,
+		config:          config,
+		stopChan:        make(chan struct{}),
+		history:         make([]string, 0, 50), // Initialize history with capacity for 50 items
+		model:           config.AnthropicModel, // Initialize model from config
+		historyFilePath: config.HistoryFilePath,
+	}
+
+	// Load history from file if it exists
+	if err := bot.loadHistoryFromFile(); err != nil {
+		logger.Printf("Failed to load history from file: %v. Starting with empty history.", err)
+	}
+
+	return bot, nil
+}
+
+// loadHistoryFromFile loads the subreddit history from a file
+func (b *Bot) loadHistoryFromFile() error {
+	// Check if file exists
+	if _, err := os.Stat(b.historyFilePath); os.IsNotExist(err) {
+		// File doesn't exist, which is fine for a new instance
+		return nil
+	}
+
+	// Read the file
+	data, err := os.ReadFile(b.historyFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read history file: %w", err)
+	}
+
+	// Split by lines and filter empty lines
+	lines := strings.Split(string(data), "\n")
+	var subreddits []string
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			subreddits = append(subreddits, line)
+		}
+	}
+
+	// Update history
+	b.historyMutex.Lock()
+	defer b.historyMutex.Unlock()
+	b.history = subreddits
+
+	b.logger.Printf("Loaded %d subreddits from history file", len(subreddits))
+	return nil
+}
+
+// saveHistoryToFile saves the subreddit history to a file
+func (b *Bot) saveHistoryToFile() error {
+	b.historyMutex.RLock()
+	defer b.historyMutex.RUnlock()
+
+	// Create the file content
+	content := strings.Join(b.history, "\n")
+
+	// Ensure the directory exists
+	dir := filepath.Dir(b.historyFilePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory for history file: %w", err)
+	}
+
+	// Write to file
+	err := os.WriteFile(b.historyFilePath, []byte(content), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write history file: %w", err)
+	}
+
+	b.logger.Printf("Saved %d subreddits to history file", len(b.history))
+	return nil
 }
 
 // Start begins the bot's update processing loop
@@ -113,6 +210,11 @@ func (b *Bot) Start(ctx context.Context) error {
 // Stop gracefully stops the bot
 func (b *Bot) Stop(ctx context.Context) error {
 	b.logger.Println("Stopping bot...")
+
+	// Save history to file before stopping
+	if err := b.saveHistoryToFile(); err != nil {
+		b.logger.Printf("Error saving history to file: %v", err)
+	}
 
 	// Signal the bot to stop
 	close(b.stopChan)
@@ -256,7 +358,9 @@ Let's get started!`
 *Basic Commands:*
 /start - Start the bot and see welcome message
 /help - Show this help message
-/history - Show your last 50 requests
+/history - Show your saved subreddit history
+/clearhistory - Clear your saved subreddit history
+/model - Show or change the current AI model
 
 *How to use:*
 Just send any subreddit name (with or without "r/") to get a summary of what's trending there.
@@ -276,6 +380,12 @@ The bot will analyze the top posts and comments from the past day and provide yo
 	case "history":
 		return b.handleHistoryCommand(message)
 
+	case "clearhistory":
+		return b.handleClearHistoryCommand(message)
+
+	case "model":
+		return b.handleModelCommand(message)
+
 	default:
 		msg := tgbotapi.NewMessage(message.Chat.ID, "Unknown command. Try /help to see available commands.")
 		_, err := b.api.Send(msg)
@@ -289,7 +399,7 @@ func (b *Bot) handleHistoryCommand(message *tgbotapi.Message) error {
 	defer b.historyMutex.RUnlock()
 
 	if len(b.history) == 0 {
-		msg := tgbotapi.NewMessage(message.Chat.ID, "📜 *Request History*\n\nYou haven't made any requests yet.")
+		msg := tgbotapi.NewMessage(message.Chat.ID, "📜 *Subreddit History*\n\nYou haven't visited any subreddits yet.")
 		msg.ParseMode = "Markdown"
 		_, err := b.api.Send(msg)
 		return err
@@ -297,20 +407,12 @@ func (b *Bot) handleHistoryCommand(message *tgbotapi.Message) error {
 
 	// Build the history message
 	var historyText strings.Builder
-	historyText.WriteString("📜 *Your Request History*\n\n")
+	historyText.WriteString("📜 *Your Subreddit History*\n\n")
 
-	// Display the requests in reverse order (newest first)
+	// Display the subreddits in reverse order (assuming newest is at the end)
 	for i := len(b.history) - 1; i >= 0; i-- {
-		request := b.history[i]
-		timeStr := request.Timestamp.Format("Jan 02, 15:04")
-
-		// Format the text based on whether it's a command or not
-		text := request.Text
-		if strings.HasPrefix(text, "/") {
-			historyText.WriteString(fmt.Sprintf("*%s* - Command: `%s`\n", timeStr, text))
-		} else {
-			historyText.WriteString(fmt.Sprintf("*%s* - Subreddit: `%s`\n", timeStr, text))
-		}
+		subreddit := b.history[i]
+		historyText.WriteString(fmt.Sprintf("• `%s`\n", subreddit))
 	}
 
 	msg := tgbotapi.NewMessage(message.Chat.ID, historyText.String())
@@ -319,29 +421,128 @@ func (b *Bot) handleHistoryCommand(message *tgbotapi.Message) error {
 	return err
 }
 
-// saveToHistory saves a user request to the history
+// handleClearHistoryCommand handles the /clearhistory command
+func (b *Bot) handleClearHistoryCommand(message *tgbotapi.Message) error {
+	b.historyMutex.Lock()
+
+	// Clear the history
+	b.history = make([]string, 0, 50)
+
+	// Save the empty history to file
+	err := b.saveHistoryToFile()
+
+	b.historyMutex.Unlock()
+
+	if err != nil {
+		b.logger.Printf("Error saving empty history to file: %v", err)
+		msg := tgbotapi.NewMessage(message.Chat.ID, "❌ Error clearing history.")
+		_, err := b.api.Send(msg)
+		return err
+	}
+
+	msg := tgbotapi.NewMessage(message.Chat.ID, "✅ Subreddit history has been cleared.")
+	_, err = b.api.Send(msg)
+	return err
+}
+
+// handleModelCommand handles the /model command
+func (b *Bot) handleModelCommand(message *tgbotapi.Message) error {
+	args := message.CommandArguments()
+	if args == "" {
+		// Show current model
+		b.modelMutex.RLock()
+		currentModel := b.model
+		b.modelMutex.RUnlock()
+
+		var modelText strings.Builder
+		modelText.WriteString("*Current AI Model*\n\n")
+
+		// Find current model info
+		var currentModelInfo ModelInfo
+		for _, model := range availableModels {
+			if model.Name == currentModel {
+				currentModelInfo = model
+				break
+			}
+		}
+		modelText.WriteString(fmt.Sprintf("Currently using: `%s` (%s)\n", currentModelInfo.Codename, currentModelInfo.Description))
+		modelText.WriteString("\n*Available Models:*\n")
+		for _, model := range availableModels {
+			modelText.WriteString(fmt.Sprintf("- `%s`: %s\n", model.Codename, model.Description))
+		}
+		modelText.WriteString("\nTo change the model, use:\n`/model <codename>`")
+
+		msg := tgbotapi.NewMessage(message.Chat.ID, modelText.String())
+		msg.ParseMode = "Markdown"
+		_, err := b.api.Send(msg)
+		return err
+	}
+
+	// Validate model codename
+	var selectedModel ModelInfo
+	validModel := false
+	for _, model := range availableModels {
+		if args == model.Codename {
+			validModel = true
+			selectedModel = model
+			break
+		}
+	}
+
+	if !validModel {
+		var codenames strings.Builder
+		codenames.WriteString("❌ Invalid model codename. Available models:\n")
+		for _, model := range availableModels {
+			codenames.WriteString(fmt.Sprintf("- `%s`: %s\n", model.Codename, model.Description))
+		}
+		msg := tgbotapi.NewMessage(message.Chat.ID, codenames.String())
+		msg.ParseMode = "Markdown"
+		_, err := b.api.Send(msg)
+		return err
+	}
+
+	// Update model
+	b.modelMutex.Lock()
+	b.model = selectedModel.Name
+	b.modelMutex.Unlock()
+
+	// Update environment variable
+	os.Setenv("ANTHROPIC_MODEL", selectedModel.Name)
+
+	msg := tgbotapi.NewMessage(message.Chat.ID, fmt.Sprintf("✅ Model changed to: `%s` (%s)", selectedModel.Codename, selectedModel.Description))
+	msg.ParseMode = "Markdown"
+	_, err := b.api.Send(msg)
+	return err
+}
+
+// saveToHistory saves a subreddit name to the history if it's not a command
 func (b *Bot) saveToHistory(message *tgbotapi.Message) {
-	// Skip saving the /history command itself
-	if message.IsCommand() && message.Command() == "history" {
+	// Skip commands
+	if message.IsCommand() {
 		return
 	}
+
+	// Clean the subreddit name (remove r/ prefix if present)
+	subredditName := strings.TrimPrefix(message.Text, "r/")
 
 	b.historyMutex.Lock()
 	defer b.historyMutex.Unlock()
 
-	// Create a new request
-	request := UserRequest{
-		UserID:    message.From.ID,
-		Username:  message.From.UserName,
-		Text:      message.Text,
-		Timestamp: time.Now(),
+	// Check if this subreddit is already in history
+	for _, existingSubreddit := range b.history {
+		if strings.EqualFold(existingSubreddit, subredditName) {
+			// Subreddit already in history, nothing to do
+			return
+		}
 	}
 
-	// Add to history
-	b.history = append(b.history, request)
+	// Add new unique subreddit to history
+	b.history = append(b.history, subredditName)
 
-	// If we have more than 50 items, remove the oldest
-	if len(b.history) > 50 {
-		b.history = b.history[len(b.history)-50:]
-	}
+	// Save history to file after adding a new item
+	go func() {
+		if err := b.saveHistoryToFile(); err != nil {
+			b.logger.Printf("Error saving history to file after adding new subreddit: %v", err)
+		}
+	}()
 }

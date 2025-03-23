@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,7 @@ const (
 
 	// Token caching
 	tokenExpiryBuffer = 5 * time.Minute
+	tokenFilePath     = "data/reddit_token.json"
 )
 
 var (
@@ -45,6 +47,12 @@ var (
 	// User agent for Reddit API requests
 	redditUserAgent = getEnvOrDefault("REDDIT_USER_AGENT", "SubTrends/1.0")
 )
+
+// TokenData represents the structure of the token file
+type TokenData struct {
+	AccessToken string    `json:"access_token"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
 
 // RedditTokenResponse represents the OAuth token response from Reddit
 type RedditTokenResponse struct {
@@ -114,8 +122,66 @@ func makeRequest(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-// getRedditAccessToken obtains an OAuth token for Reddit API access, with caching
+// saveTokenToFile saves the token and its expiration time to a file
+func saveTokenToFile(token string, expiresIn time.Duration) error {
+	tokenData := TokenData{
+		AccessToken: token,
+		ExpiresAt:   time.Now().Add(time.Second * expiresIn),
+	}
+
+	data, err := json.MarshalIndent(tokenData, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal token data: %w", err)
+	}
+
+	// Ensure the directory exists
+	dir := filepath.Dir(tokenFilePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory for token file: %w", err)
+	}
+
+	if err := os.WriteFile(tokenFilePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write token file: %w", err)
+	}
+
+	log.Printf("INFO: Token saved to file, expires at %v", tokenData.ExpiresAt)
+	return nil
+}
+
+// readTokenFromFile attempts to read the token from the file
+func readTokenFromFile() (string, error) {
+	data, err := os.ReadFile(tokenFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to read token file: %w", err)
+	}
+
+	var tokenData TokenData
+	if err := json.Unmarshal(data, &tokenData); err != nil {
+		return "", fmt.Errorf("failed to unmarshal token data: %w", err)
+	}
+
+	// Check if token is expired or about to expire
+	if time.Now().Add(tokenExpiryBuffer).After(tokenData.ExpiresAt) {
+		return "", nil
+	}
+
+	log.Printf("INFO: Token loaded from file, expires at %v", tokenData.ExpiresAt)
+	return tokenData.AccessToken, nil
+}
+
+// getRedditAccessToken obtains an OAuth token for Reddit API access, with caching and file persistence
 func getRedditAccessToken() (string, error) {
+	// First try to read from file
+	token, err := readTokenFromFile()
+	if err != nil {
+		log.Printf("WARNING: Failed to read token from file: %v", err)
+	} else if token != "" {
+		return token, nil
+	}
+
 	// Check if cached token is still valid (with buffer time)
 	tokenMutex.RLock()
 	if time.Now().Add(tokenExpiryBuffer).Before(tokenExpiration) && cachedToken != "" {
@@ -170,11 +236,16 @@ func getRedditAccessToken() (string, error) {
 		return "", fmt.Errorf("empty access token received")
 	}
 
-	// Cache the token
+	// Cache the token in memory
 	cachedToken = tokenResp.AccessToken
 	tokenExpiration = time.Now().Add(time.Second * tokenResp.ExpiresIn)
-	log.Printf("INFO: New Reddit token acquired, expires in %v", tokenResp.ExpiresIn*time.Second)
 
+	// Save token to file
+	if err := saveTokenToFile(tokenResp.AccessToken, tokenResp.ExpiresIn); err != nil {
+		log.Printf("WARNING: Failed to save token to file: %v", err)
+	}
+
+	log.Printf("INFO: New Reddit token acquired, expires in %v", tokenResp.ExpiresIn*time.Second)
 	return cachedToken, nil
 }
 
