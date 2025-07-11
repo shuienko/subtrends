@@ -72,18 +72,18 @@ type Bot struct {
 // Available models for selection
 var availableModels = []ModelInfo{
 	{
-		Codename:    "simple",
+		Codename:    "haiku3",
 		Name:        "claude-3-haiku-20240307",
 		Description: "Fast and efficient model (default)",
 	},
 	{
-		Codename:    "balanced",
-		Name:        "claude-3-sonnet-20240229",
+		Codename:    "haiku35",
+		Name:        "claude-3-5-haiku-latest",
 		Description: "Balanced performance and capabilities",
 	},
 	{
-		Codename:    "advanced",
-		Name:        "claude-3-opus-20240229",
+		Codename:    "sonnet4",
+		Name:        "claude-sonnet-4-0",
 		Description: "Most capable model for complex tasks",
 	},
 }
