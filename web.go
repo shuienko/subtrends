@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -166,8 +167,11 @@ func (ws *WebServer) getSession(c *gin.Context) *Session {
 	// Get or create session data
 	var sessionData Session
 	if data, ok := session.Values["data"]; ok {
-		if sd, ok := data.(Session); ok {
-			sessionData = sd
+		if jsonData, ok := data.(string); ok {
+			// Try to unmarshal JSON data
+			if err := json.Unmarshal([]byte(jsonData), &sessionData); err != nil {
+				log.Printf("Failed to unmarshal session data: %v", err)
+			}
 		}
 	}
 
@@ -187,7 +191,14 @@ func (ws *WebServer) getSession(c *gin.Context) *Session {
 // saveSession saves the session data
 func (ws *WebServer) saveSession(c *gin.Context, sessionData *Session) error {
 	session, _ := ws.store.Get(c.Request, "subtrends-session")
-	session.Values["data"] = *sessionData
+
+	// Marshal session data to JSON
+	jsonData, err := json.Marshal(sessionData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal session data: %w", err)
+	}
+
+	session.Values["data"] = string(jsonData)
 	return session.Save(c.Request, c.Writer)
 }
 
@@ -233,11 +244,18 @@ func (ws *WebServer) handleAnalyze(c *gin.Context) {
 	}
 	if !found {
 		sessionData.History = append(sessionData.History, subreddit)
+		log.Printf("Added %s to history. Total history items: %d", subreddit, len(sessionData.History))
+	} else {
+		log.Printf("Subreddit %s already in history", subreddit)
 	}
 	ws.historyMutex.Unlock()
 
 	// Save session
-	ws.saveSession(c, sessionData)
+	if err := ws.saveSession(c, sessionData); err != nil {
+		log.Printf("Failed to save session: %v", err)
+	} else {
+		log.Printf("Session saved successfully")
+	}
 
 	// Get Reddit data
 	token, err := getRedditAccessToken()
@@ -280,6 +298,11 @@ func (ws *WebServer) handleAnalyze(c *gin.Context) {
 // handleHistory serves the user's history
 func (ws *WebServer) handleHistory(c *gin.Context) {
 	sessionData := ws.getSession(c)
+
+	log.Printf("History page - UserID: %s, History length: %d", sessionData.UserID, len(sessionData.History))
+	if len(sessionData.History) > 0 {
+		log.Printf("History items: %v", sessionData.History)
+	}
 
 	c.HTML(http.StatusOK, "history.html", gin.H{
 		"Title":   "SubTrends - History",
