@@ -14,34 +14,22 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	TelegramToken    string
-	AuthorizedUserID int64
-	Debug            bool
-	ShutdownTimeout  time.Duration
-	AnthropicModel   string
-	HistoryFilePath  string
+	Port            string
+	StaticFilesPath string
+	SessionSecret   string
+	TemplatePath    string
+	ShutdownTimeout time.Duration
+	AnthropicModel  string
+	HistoryFilePath string
 }
 
 // LoadConfig loads configuration from environment variables
 func LoadConfig() (*Config, error) {
-	token := os.Getenv("TELEGRAM_TOKEN")
-	if token == "" {
-		return nil, ErrMissingEnvVar("TELEGRAM_TOKEN")
-	}
-
-	authorizedUserIDStr := os.Getenv("AUTHORIZED_USER_ID")
-	if authorizedUserIDStr == "" {
-		return nil, ErrMissingEnvVar("AUTHORIZED_USER_ID")
-	}
-
-	authorizedUserID, err := strconv.ParseInt(authorizedUserIDStr, 10, 64)
-	if err != nil {
-		return nil, ErrInvalidEnvVar("AUTHORIZED_USER_ID", err)
-	}
-
-	// Optional debug mode
-	debugStr := os.Getenv("DEBUG")
-	debug := debugStr == "true" || debugStr == "1"
+	// Web server configuration
+	port := getEnvOrDefault("PORT", "8080")
+	staticFilesPath := getEnvOrDefault("STATIC_FILES_PATH", "./static")
+	sessionSecret := getEnvOrDefault("SESSION_SECRET", "your-secret-key-change-in-production")
+	templatePath := getEnvOrDefault("TEMPLATE_PATH", "./templates")
 
 	// Shutdown timeout with default
 	shutdownTimeoutStr := getEnvOrDefault("SHUTDOWN_TIMEOUT_SECONDS", "5")
@@ -57,12 +45,13 @@ func LoadConfig() (*Config, error) {
 	historyFilePath := getEnvOrDefault("HISTORY_FILE_PATH", "data/subreddit_history.txt")
 
 	return &Config{
-		TelegramToken:    token,
-		AuthorizedUserID: authorizedUserID,
-		Debug:            debug,
-		ShutdownTimeout:  time.Duration(shutdownTimeout) * time.Second,
-		AnthropicModel:   anthropicModel,
-		HistoryFilePath:  historyFilePath,
+		Port:            port,
+		StaticFilesPath: staticFilesPath,
+		SessionSecret:   sessionSecret,
+		TemplatePath:    templatePath,
+		ShutdownTimeout: time.Duration(shutdownTimeout) * time.Second,
+		AnthropicModel:  anthropicModel,
+		HistoryFilePath: historyFilePath,
 	}, nil
 }
 
@@ -95,10 +84,10 @@ func main() {
 		log.Fatalf("Failed to create data directory: %v", err)
 	}
 
-	// Create bot instance
-	bot, err := NewBot(config)
+	// Create web server instance
+	server, err := NewWebServer(config)
 	if err != nil {
-		log.Fatalf("Failed to create bot: %v", err)
+		log.Fatalf("Failed to create web server: %v", err)
 	}
 
 	// Create a context that will be canceled on interrupt
@@ -109,26 +98,26 @@ func main() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 
-	// Start bot in a goroutine
+	// Start server in a goroutine
 	go func() {
-		if err := bot.Start(ctx); err != nil {
-			log.Printf("Bot stopped with error: %v", err)
+		if err := server.Start(ctx); err != nil {
+			log.Printf("Server stopped with error: %v", err)
 			cancel()
 		}
 	}()
 
 	// Wait for termination signal
 	<-signalChan
-	log.Println("Shutdown signal received, stopping bot...")
+	log.Println("Shutdown signal received, stopping server...")
 
 	// Create a context with timeout for graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), config.ShutdownTimeout)
 	defer shutdownCancel()
 
-	// Stop the bot
-	if err := bot.Stop(shutdownCtx); err != nil {
+	// Stop the server
+	if err := server.Stop(shutdownCtx); err != nil {
 		log.Printf("Error during shutdown: %v", err)
 	}
 
-	log.Println("Bot has been gracefully stopped")
+	log.Println("Server has been gracefully stopped")
 }

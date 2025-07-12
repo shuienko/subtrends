@@ -14,16 +14,29 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN go build -o bot .
+RUN go build -o web .
 
 # Final stage
 FROM alpine:3.19
+
+# Install ca-certificates for HTTPS requests
+RUN apk --no-cache add ca-certificates
 
 # Set working directory
 WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder /app/bot .
+COPY --from=builder /app/web .
 
-# Command to run the bot
-CMD ["./bot"]
+# Create directories for templates and static files
+RUN mkdir -p templates static/css static/js
+
+# Copy templates and static files
+COPY templates/ templates/
+COPY static/ static/
+
+# Expose port
+EXPOSE 8080
+
+# Command to run the web server
+CMD ["./web"]

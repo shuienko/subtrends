@@ -1,0 +1,129 @@
+{{define "index.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-chart-line"></i> SubTrends
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/history"><i class="fas fa-history"></i> History</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/model"><i class="fas fa-cog"></i> Model</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-4">
+        <div class="row">
+            <div class="col-lg-8 mx-auto">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white">
+                        <h1 class="h3 mb-0">
+                            <i class="fas fa-search"></i> Analyze Subreddit Trends
+                        </h1>
+                    </div>
+                    <div class="card-body">
+                        <form id="analyzeForm" class="mb-4">
+                            <div class="mb-3">
+                                <label for="subreddit" class="form-label">
+                                    <i class="fas fa-reddit"></i> Subreddit Name
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text">r/</span>
+                                    <input type="text" class="form-control" id="subreddit" name="subreddit" 
+                                           placeholder="e.g., technology, science, askreddit" required>
+                                    <button type="submit" class="btn btn-primary" id="analyzeBtn">
+                                        <i class="fas fa-magic"></i> Analyze
+                                    </button>
+                                </div>
+                                <div class="form-text">
+                                    Enter any subreddit name (with or without "r/") to get an AI-powered summary of trending topics.
+                                </div>
+                            </div>
+                        </form>
+
+                        <!-- Loading indicator -->
+                        <div id="loading" class="text-center d-none">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2 text-muted">Analyzing subreddit data...</p>
+                        </div>
+
+                        <!-- Results section -->
+                        <div id="results" class="d-none">
+                            <div class="card border-success">
+                                <div class="card-header bg-success text-white">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-chart-bar"></i> Analysis Results
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="summary"></div>
+                                    <div id="posts" class="mt-4"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Error section -->
+                        <div id="error" class="alert alert-danger d-none" role="alert">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span id="errorMessage"></span>
+                        </div>
+
+                        <!-- Recent History -->
+                        {{if .History}}
+                        <div class="mt-4">
+                            <h5><i class="fas fa-clock"></i> Recent Analysis</h5>
+                            <div class="row">
+                                {{range .History}}
+                                <div class="col-md-3 mb-2">
+                                    <button class="btn btn-outline-secondary btn-sm w-100" 
+                                            onclick="analyzeSubreddit('{{.}}')">
+                                        r/{{.}}
+                                    </button>
+                                </div>
+                                {{end}}
+                            </div>
+                        </div>
+                        {{end}}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-light mt-5 py-3">
+        <div class="container text-center">
+            <p class="text-muted mb-0">
+                <i class="fas fa-code"></i> SubTrends - Reddit Analysis powered by AI
+            </p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
+{{end}} 
