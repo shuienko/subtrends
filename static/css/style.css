@@ -317,6 +317,16 @@ body::before {
     transform: scale(1.1);
 }
 
+/* Override uppercase transform for subreddit names in history buttons */
+.btn.history-card {
+    text-transform: none;
+}
+
+/* Override uppercase transform for subreddit names in recent analysis buttons */
+.btn.btn-outline-secondary.history-card {
+    text-transform: none;
+}
+
 /* History card globe icon specific styling */
 .history-card .fas.fa-globe {
     font-size: 1.5rem;
