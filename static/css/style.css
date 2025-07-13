@@ -525,4 +525,80 @@ body::before {
 /* Warning styling */
 .border-warning {
     border-color: var(--terminal-orange) !important;
+}
+
+/* History list styling */
+.history-list-item {
+    border: 2px solid #e9ecef;
+    border-radius: var(--border-radius);
+    margin-bottom: 0.5rem;
+    padding: 1rem;
+    transition: all 0.3s ease;
+    background: var(--card-bg);
+    position: relative;
+    overflow: hidden;
+}
+
+.history-list-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 128, 255, 0.1), transparent);
+    transition: left 0.5s;
+}
+
+.history-list-item:hover::before {
+    left: 100%;
+}
+
+.history-list-item:hover {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-color: var(--terminal-blue);
+    transform: translateX(5px);
+    box-shadow: 0 4px 15px rgba(0, 128, 255, 0.2);
+}
+
+.history-list-item .fas.fa-globe {
+    color: var(--terminal-blue);
+    font-size: 1.2rem;
+}
+
+.history-list-item .fas.fa-chevron-right {
+    opacity: 0.6;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.history-list-item:hover .fas.fa-chevron-right {
+    opacity: 1;
+    transform: translateX(3px);
+}
+
+/* Ensure list group has no extra spacing */
+.list-group {
+    --bs-list-group-border-width: 0;
+}
+
+.list-group-item {
+    border: none !important;
+    padding: 0;
+}
+
+/* Mobile adjustments for history list */
+@media (max-width: 768px) {
+    .history-list-item {
+        padding: 0.8rem;
+        margin-bottom: 0.4rem;
+    }
+    
+    .history-list-item .fas.fa-globe {
+        font-size: 1.1rem;
+    }
+    
+    .history-list-item span {
+        font-size: 0.95rem;
+    }
 } 
