@@ -19,7 +19,6 @@ type Config struct {
 	SessionSecret   string
 	TemplatePath    string
 	ShutdownTimeout time.Duration
-	AnthropicModel  string
 	HistoryFilePath string
 }
 
@@ -38,9 +37,6 @@ func LoadConfig() (*Config, error) {
 		shutdownTimeout = 5 // Default to 5 seconds
 	}
 
-	// Anthropic model with default
-	anthropicModel := getEnvOrDefault("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
-
 	// History file path with default
 	historyFilePath := getEnvOrDefault("HISTORY_FILE_PATH", "data/subreddit_history.txt")
 
@@ -50,7 +46,6 @@ func LoadConfig() (*Config, error) {
 		SessionSecret:   sessionSecret,
 		TemplatePath:    templatePath,
 		ShutdownTimeout: time.Duration(shutdownTimeout) * time.Second,
-		AnthropicModel:  anthropicModel,
 		HistoryFilePath: historyFilePath,
 	}, nil
 }

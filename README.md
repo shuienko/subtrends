@@ -40,7 +40,6 @@ PORT=8080
 SESSION_SECRET=your-secret-key-change-in-production
 STATIC_FILES_PATH=./static
 TEMPLATE_PATH=./templates
-ANTHROPIC_MODEL=claude-3-haiku-20240307
 HISTORY_FILE_PATH=data/subreddit_history.txt
 SHUTDOWN_TIMEOUT_SECONDS=5
 ```

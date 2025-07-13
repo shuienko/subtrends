@@ -180,7 +180,7 @@ func (ws *WebServer) getSession(c *gin.Context) *Session {
 		sessionData = Session{
 			UserID:    generateUserID(),
 			History:   make([]string, 0, 50),
-			Model:     ws.config.AnthropicModel,
+			Model:     availableModels[0].Name, // Use the first model as default
 			CreatedAt: time.Now(),
 		}
 	}
@@ -272,7 +272,7 @@ func (ws *WebServer) handleAnalyze(c *gin.Context) {
 	}
 
 	// Generate summary
-	summary, err := summarizePosts(data)
+	summary, err := summarizePosts(data, sessionData.Model)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate summary"})
 		return

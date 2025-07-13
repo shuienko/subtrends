@@ -25,7 +25,6 @@ const (
 
 	// Environment variable names
 	envAnthropicAPIKey = "ANTHROPIC_API_KEY"
-	envAnthropicModel  = "ANTHROPIC_MODEL"
 
 	// Request parameters
 	defaultMaxTokens   = 1500
@@ -95,9 +94,7 @@ type AnthropicResponse struct {
 }
 
 // summarizePosts takes a string of Reddit posts and returns a summarized version using the Anthropic API
-func summarizePosts(text string) (string, error) {
-	// Get model from environment or use default
-	model := getEnvOrDefault(envAnthropicModel, defaultModel)
+func summarizePosts(text string, model string) (string, error) {
 	log.Printf("INFO: Making Anthropic API call with model: %s", model)
 
 	// Get API key from environment
