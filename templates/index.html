@@ -10,7 +10,7 @@
     <link href="/static/css/style.css" rel="stylesheet">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <nav class="navbar navbar-expand-lg navbar-dark">
         <div class="container">
             <a class="navbar-brand" href="/">
                 <i class="fas fa-chart-line"></i> SubTrends
@@ -37,8 +37,8 @@
     <main class="container mt-4">
         <div class="row">
             <div class="col-lg-8 mx-auto">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-primary text-white">
+                <div class="card">
+                    <div class="card-header">
                         <h1 class="h3 mb-0">
                             <i class="fas fa-search"></i> Analyze Subreddit Trends
                         </h1>
@@ -58,17 +58,17 @@
                                     </button>
                                 </div>
                                 <div class="form-text">
-                                    Enter any subreddit name (with or without "r/") to get an AI-powered summary of trending topics.
+                                    <i class="fas fa-info-circle"></i> Enter any subreddit name (with or without "r/") to get an AI-powered summary of trending topics.
                                 </div>
                             </div>
                         </form>
 
                         <!-- Loading indicator -->
                         <div id="loading" class="text-center d-none">
-                            <div class="spinner-border text-primary" role="status">
+                            <div class="spinner-border" role="status">
                                 <span class="visually-hidden">Loading...</span>
                             </div>
-                            <p class="mt-2 text-muted">Analyzing subreddit data...</p>
+                            <p class="mt-2 loading-text">Analyzing subreddit data...</p>
                         </div>
 
                         <!-- Results section -->
@@ -99,9 +99,9 @@
                             <div class="row">
                                 {{range .History}}
                                 <div class="col-md-3 mb-2">
-                                    <button class="btn btn-outline-secondary btn-sm w-100" 
+                                    <button class="btn btn-outline-secondary btn-sm w-100 history-card" 
                                             onclick="analyzeSubreddit('{{.}}')">
-                                        r/{{.}}
+                                        <i class="fas fa-globe"></i> r/{{.}}
                                     </button>
                                 </div>
                                 {{end}}
