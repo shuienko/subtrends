@@ -77,18 +77,6 @@ type RedditResponse struct {
 	} `json:"data"`
 }
 
-// RedditComment represents the comment response structure from Reddit
-type RedditComment struct {
-	Data struct {
-		Children []struct {
-			Data struct {
-				Body string `json:"body"`
-				Ups  int    `json:"ups"`
-			} `json:"data"`
-		} `json:"children"`
-	} `json:"data"`
-}
-
 // makeRequest handles HTTP requests with rate limiting and common error handling
 func makeRequest(req *http.Request) (*http.Response, error) {
 	// Apply rate limiting

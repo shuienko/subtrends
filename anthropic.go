@@ -21,11 +21,9 @@ const (
 	// API related constants
 	anthropicAPIEndpoint = "https://api.anthropic.com/v1/messages"
 	anthropicAPIVersion  = "2023-06-01"
-	defaultModel         = "claude-3-haiku-20240307"
 
 	// Environment variable names
 	envAnthropicAPIKey = "ANTHROPIC_API_KEY"
-	envAnthropicModel  = "ANTHROPIC_MODEL"
 
 	// Request parameters
 	defaultMaxTokens   = 1500
@@ -95,9 +93,7 @@ type AnthropicResponse struct {
 }
 
 // summarizePosts takes a string of Reddit posts and returns a summarized version using the Anthropic API
-func summarizePosts(text string) (string, error) {
-	// Get model from environment or use default
-	model := getEnvOrDefault(envAnthropicModel, defaultModel)
+func summarizePosts(text string, model string) (string, error) {
 	log.Printf("INFO: Making Anthropic API call with model: %s", model)
 
 	// Get API key from environment
@@ -122,8 +118,6 @@ func summarizePosts(text string) (string, error) {
 	// Format and return the response
 	return formatResponse(response)
 }
-
-// getEnvOrDefault returns the value of an environment variable or a default value if not set
 
 // getRequiredEnvVar returns the value of a required environment variable or an error if not set
 func getRequiredEnvVar(key string) (string, error) {

@@ -1,117 +1,204 @@
-# 🤖 SubTrends Bot: Your AI-Powered Reddit Time Machine
+# SubTrends - Reddit Analysis Web Application
 
-Ever wished you could get the TL;DR of any subreddit without drowning in endless scrolling? Say hello to SubTrends Bot! 🎉
+A modern web application that analyzes Reddit subreddits and provides AI-powered summaries of trending topics and discussions.
 
-## 🌟 What's This Sorcery?
+## Features
 
-SubTrends Bot is your personal Reddit trend analyzer that combines the power of:
-- Reddit's top posts and discussions
-- Claude 3 Haiku AI's summarization capabilities
-- Telegram's smooth interface
-- Your curiosity about what's trending!
+- **Subreddit Analysis**: Analyze any subreddit to get AI-generated summaries of trending topics
+- **Multiple AI Models**: Choose from different Claude AI models for analysis
+- **User History**: Track your analysis history with session management
+- **Real-time Processing**: Get instant results with progress indicators
+- **Responsive Design**: Modern, mobile-friendly interface
+- **Rate Limiting**: Built-in protection against API abuse
 
-## 🚀 Features
+## Technology Stack
 
-- 🎯 Get instant summaries of any subreddit's hottest discussions from the past day
-- 🧠 AI-powered analysis of community trends, sentiments, and hot takes
-- 🔒 Single-user mode for personal use (authorization via Telegram user ID)
-- 🔗 Links to top posts for easy browsing
-- 📊 Organized summaries with trending topics and community pulse
-- 🚀 Fast responses with Claude 3 Haiku model by default
-- 📜 History tracking of previously requested subreddits
-- ⚙️ Model selection capability for different Claude models
-- 🛑 Proper rate limiting for Reddit and Anthropic APIs
-- 💼 Token caching for efficient Reddit API usage
+- **Backend**: Go with Gin web framework
+- **Frontend**: HTML5, CSS3, JavaScript with Bootstrap 5
+- **AI**: Anthropic Claude API for intelligent summarization
+- **Data**: Reddit API for subreddit data
+- **Session Management**: Gorilla Sessions for user state
 
-## 🛠️ Setup
+## Quick Start
 
 ### Prerequisites
 
-- Docker installed on your system
-- API Keys:
-  - Telegram Bot Token
-  - Anthropic API Key (for Claude)
-  - Reddit API Credentials
-  - Your Telegram User ID
+- Go 1.23 or higher
+- Reddit API credentials
+- Anthropic API key
 
-### 🐳 Docker Quick Start
+### Environment Variables
 
-1. Clone this repository:
 ```bash
-git clone https://github.com/yourusername/subtrends-bot
-cd subtrends-bot
-```
-
-2. Create a `.env` file:
-```env
-TELEGRAM_TOKEN=your_telegram_bot_token
-ANTHROPIC_API_KEY=your_anthropic_api_key
+# Required
 REDDIT_CLIENT_ID=your_reddit_client_id
 REDDIT_CLIENT_SECRET=your_reddit_client_secret
-REDDIT_USER_AGENT=SubTrends/1.0
-AUTHORIZED_USER_ID=your_telegram_user_id
-# Optional settings
-ANTHROPIC_MODEL=claude-3-haiku-20240307
-DEBUG=false
+ANTHROPIC_API_KEY=your_anthropic_api_key
+
+# Optional (with defaults)
+PORT=8080
+SESSION_SECRET=your-secret-key-change-in-production
+STATIC_FILES_PATH=./static
+TEMPLATE_PATH=./templates
+HISTORY_FILE_PATH=data/subreddit_history.txt
 SHUTDOWN_TIMEOUT_SECONDS=5
-HISTORY_FILE_PATH=subreddit_history.txt
 ```
 
-3. Build and run with Docker:
+### Running Locally
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd subtrends
+   ```
+
+2. **Set environment variables**
+   ```bash
+   export REDDIT_CLIENT_ID=your_reddit_client_id
+   export REDDIT_CLIENT_SECRET=your_reddit_client_secret
+   export ANTHROPIC_API_KEY=your_anthropic_api_key
+   ```
+
+3. **Install dependencies**
+   ```bash
+   go mod tidy
+   ```
+
+4. **Run the application**
+   ```bash
+   go run .
+   ```
+
+5. **Open your browser**
+   Navigate to `http://localhost:8080`
+
+### Using Docker
+
+1. **Build the image**
+   ```bash
+   docker build -t subtrends .
+   ```
+
+2. **Run the container**
+   ```bash
+   docker run -p 8080:8080 \
+     -e REDDIT_CLIENT_ID=your_reddit_client_id \
+     -e REDDIT_CLIENT_SECRET=your_reddit_client_secret \
+     -e ANTHROPIC_API_KEY=your_anthropic_api_key \
+     subtrends
+   ```
+
+## Usage
+
+### Analyzing Subreddits
+
+1. Enter a subreddit name (with or without "r/") in the search box
+2. Click "Analyze" to start the analysis
+3. Wait for the AI to process the data and generate a summary
+4. View the results with trending topics, community pulse, and hot takes
+5. Click on post links to view the original Reddit posts
+
+### Managing History
+
+- View your analysis history on the History page
+- Click on any previous subreddit to analyze it again
+- Clear your history with the "Clear History" button
+
+### Changing AI Models
+
+- Visit the Model page to see available AI models
+- Select a different model from the dropdown
+- The new model will be used for future analyses
+
+## API Endpoints
+
+- `GET /` - Main application page
+- `POST /analyze` - Analyze a subreddit
+- `GET /history` - View analysis history
+- `POST /clear-history` - Clear analysis history
+- `GET /model` - View model selection page
+- `POST /model` - Change AI model
+- `GET /health` - Health check endpoint
+
+## Architecture
+
+### Core Components
+
+- **Web Server** (`web.go`): HTTP server with Gin framework
+- **Reddit Integration** (`reddit.go`): Reddit API client with rate limiting
+- **AI Integration** (`anthropic.go`): Anthropic Claude API client
+- **Configuration** (`main.go`): Environment-based configuration
+- **Templates**: HTML templates for the web interface
+- **Static Assets**: CSS and JavaScript for the frontend
+
+### Data Flow
+
+1. User submits subreddit name via web form
+2. Server validates input and creates user session
+3. Reddit API fetches top posts and comments
+4. Anthropic API generates AI summary
+5. Results are formatted and returned to user
+6. Analysis is saved to user's history
+
+## Configuration
+
+### Available AI Models
+
+- **haiku3**: Fast and efficient model (default)
+- **haiku35**: Balanced performance and capabilities
+- **sonnet4**: Most capable model for complex tasks
+
+### Rate Limiting
+
+- Reddit API: 1 request/second with burst of 5
+- Anthropic API: 10 requests/minute with burst of 3
+
+## Development
+
+### Project Structure
+
+```
+subtrends/
+├── main.go              # Application entry point
+├── web.go               # Web server and routes
+├── reddit.go            # Reddit API integration
+├── anthropic.go         # Anthropic AI integration
+├── utils.go             # Utility functions
+├── templates/           # HTML templates
+│   ├── layout.html
+│   ├── index.html
+│   ├── history.html
+│   └── model.html
+├── static/              # Static assets
+│   ├── css/style.css
+│   └── js/app.js
+├── go.mod               # Go dependencies
+├── Dockerfile           # Docker configuration
+└── README.md            # This file
+```
+
+### Building
+
 ```bash
-docker build -t subtrends-bot .
-docker run -d --env-file .env --name subtrends-bot subtrends-bot
+# Build for current platform
+go build -o web .
+
+# Build for specific platform
+GOOS=linux GOARCH=amd64 go build -o web .
 ```
 
-## 🎮 Usage
+## Contributing
 
-1. Start a chat with your bot on Telegram
-2. Send any subreddit name (with or without r/), for example: `programming`
-3. The bot will:
-   - Connect to Reddit and fetch top posts (default: top 7 posts from the past day)
-   - Retrieve top comments for each post
-   - Analyze the content using Claude AI
-   - Return a nicely formatted summary with trending topics and community sentiment
-   - Include links to the top posts for easy access
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-## 💡 Commands
-
-- `/start` - Get a welcome message and basic instructions
-- `/help` - View available commands and usage tips
-- `/history` - View your saved subreddit history
-- `/clearhistory` - Clear your subreddit history
-- `/model` - View or change the AI model used for summaries
-- Just send any subreddit name to get a summary!
-
-## 🧩 Technical Implementation
-
-- **Go**: Built with Go (requires Go 1.23.4)
-- **Telegram**: Uses go-telegram-bot-api/v5 for Telegram integration
-- **Rate Limiting**: Implements request limiting for both Reddit (1 req/sec) and Anthropic APIs (10 req/min)
-- **Concurrency**: Proper mutex handling for thread safety
-- **Graceful Shutdown**: Signal handling for clean application termination
-- **Error Handling**: Custom error types for better debugging
-- **Token Management**: Reddit token caching to reduce authentication requests
-- **History Persistence**: Saves subreddit history to local file for persistence across restarts
-
-## ⚠️ Limitations
-
-- Single user per bot instance (authenticated via Telegram User ID)
-- Reddit API rate limits apply (1 request per second)
-- Anthropic API rate limits (10 requests per minute)
-- Summarizes posts from the past day only
-- Default limit of 7 top posts analyzed per request
-
-## 📜 License
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🎭 Credits
+## Support
 
-Built with ❤️ using:
-- Go-Telegram-Bot-API
-- Claude 3 Haiku by Anthropic
-- Reddit API
-- And lots of coffee ☕
-
-Remember: With great power comes great responsibility. Use this bot wisely, and happy trending! 🚀
+For issues and questions, please open an issue on the GitHub repository.
