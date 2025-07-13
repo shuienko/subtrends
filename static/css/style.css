@@ -212,6 +212,50 @@ body::before {
     font-size: 1.1rem;
 }
 
+/* Mobile responsive font sizing for results */
+@media (max-width: 768px) {
+    #summary {
+        font-size: 0.9rem;
+        line-height: 1.6;
+    }
+    
+    #summary h3 {
+        font-size: 1.1rem;
+        margin-bottom: 1rem;
+    }
+    
+    #summary ul {
+        padding-left: 1.5rem;
+    }
+    
+    #summary li {
+        margin-bottom: 0.5rem;
+    }
+    
+    #summary li::before {
+        left: -1.2rem;
+    }
+}
+
+@media (max-width: 480px) {
+    #summary {
+        font-size: 0.85rem;
+        line-height: 1.5;
+    }
+    
+    #summary h3 {
+        font-size: 1rem;
+    }
+    
+    #summary ul {
+        padding-left: 1.2rem;
+    }
+    
+    #summary li::before {
+        left: -1rem;
+    }
+}
+
 #summary h3 {
     background: var(--success-gradient);
     -webkit-background-clip: text;
