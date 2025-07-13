@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize form handlers
     initializeAnalyzeForm();
     initializeModelForm();
+    restoreResults(); // Restore results on page load
 });
 
 // Initialize the analyze form
@@ -301,6 +302,34 @@ function debounce(func, wait) {
         timeout = setTimeout(later, wait);
     };
 }
+
+// Persist results to localStorage
+function persistResults(data) {
+    try {
+        localStorage.setItem('subtrends_last_results', JSON.stringify(data));
+    } catch (e) {
+        // Ignore storage errors
+    }
+}
+
+// Restore results from localStorage
+function restoreResults() {
+    try {
+        const data = localStorage.getItem('subtrends_last_results');
+        if (data) {
+            showResultsOriginal(JSON.parse(data));
+        }
+    } catch (e) {
+        // Ignore parse errors
+    }
+}
+
+// Save original showResults
+const showResultsOriginal = showResults;
+showResults = function(data) {
+    persistResults(data);
+    showResultsOriginal(data);
+};
 
 // Add smooth scrolling to all internal links
 document.addEventListener('DOMContentLoaded', function() {

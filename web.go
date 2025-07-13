@@ -210,10 +210,16 @@ func generateUserID() string {
 func (ws *WebServer) handleHome(c *gin.Context) {
 	sessionData := ws.getSession(c)
 
+	// Limit to last 4 for Recent Analysis
+	history := sessionData.History
+	if len(history) > 4 {
+		history = history[len(history)-4:]
+	}
+
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"Title":   "SubTrends - Reddit Analysis",
 		"UserID":  sessionData.UserID,
-		"History": sessionData.History,
+		"History": history,
 		"Model":   sessionData.Model,
 		"Models":  availableModels,
 	})

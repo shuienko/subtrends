@@ -44,6 +44,21 @@
                         </h1>
                     </div>
                     <div class="card-body">
+                        {{if .History}}
+                        <div class="mb-4">
+                            <h5><i class="fas fa-clock"></i> Recent Analysis</h5>
+                            <div class="row">
+                                {{range .History}}
+                                <div class="col-md-3 mb-2">
+                                    <button class="btn btn-outline-secondary btn-sm w-100 history-card" 
+                                            onclick="analyzeSubreddit('{{.}}')">
+                                        <i class="fas fa-globe"></i> r/{{.}}
+                                    </button>
+                                </div>
+                                {{end}}
+                            </div>
+                        </div>
+                        {{end}}
                         <form id="analyzeForm" class="mb-4">
                             <div class="mb-3">
                                 <label for="subreddit" class="form-label">
@@ -91,23 +106,6 @@
                             <i class="fas fa-exclamation-triangle"></i>
                             <span id="errorMessage"></span>
                         </div>
-
-                        <!-- Recent History -->
-                        {{if .History}}
-                        <div class="mt-4">
-                            <h5><i class="fas fa-clock"></i> Recent Analysis</h5>
-                            <div class="row">
-                                {{range .History}}
-                                <div class="col-md-3 mb-2">
-                                    <button class="btn btn-outline-secondary btn-sm w-100 history-card" 
-                                            onclick="analyzeSubreddit('{{.}}')">
-                                        <i class="fas fa-globe"></i> r/{{.}}
-                                    </button>
-                                </div>
-                                {{end}}
-                            </div>
-                        </div>
-                        {{end}}
                     </div>
                 </div>
             </div>
