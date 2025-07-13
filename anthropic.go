@@ -21,7 +21,6 @@ const (
 	// API related constants
 	anthropicAPIEndpoint = "https://api.anthropic.com/v1/messages"
 	anthropicAPIVersion  = "2023-06-01"
-	defaultModel         = "claude-3-haiku-20240307"
 
 	// Environment variable names
 	envAnthropicAPIKey = "ANTHROPIC_API_KEY"
@@ -119,8 +118,6 @@ func summarizePosts(text string, model string) (string, error) {
 	// Format and return the response
 	return formatResponse(response)
 }
-
-// getEnvOrDefault returns the value of an environment variable or a default value if not set
 
 // getRequiredEnvVar returns the value of a required environment variable or an error if not set
 func getRequiredEnvVar(key string) (string, error) {

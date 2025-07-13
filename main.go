@@ -19,7 +19,6 @@ type Config struct {
 	SessionSecret   string
 	TemplatePath    string
 	ShutdownTimeout time.Duration
-	HistoryFilePath string
 }
 
 // LoadConfig loads configuration from environment variables
@@ -37,16 +36,12 @@ func LoadConfig() (*Config, error) {
 		shutdownTimeout = 5 // Default to 5 seconds
 	}
 
-	// History file path with default
-	historyFilePath := getEnvOrDefault("HISTORY_FILE_PATH", "data/subreddit_history.txt")
-
 	return &Config{
 		Port:            port,
 		StaticFilesPath: staticFilesPath,
 		SessionSecret:   sessionSecret,
 		TemplatePath:    templatePath,
 		ShutdownTimeout: time.Duration(shutdownTimeout) * time.Second,
-		HistoryFilePath: historyFilePath,
 	}, nil
 }
 

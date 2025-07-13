@@ -18,7 +18,6 @@ import (
 // Session represents user session data
 type Session struct {
 	UserID    string
-	Username  string
 	History   []string
 	Model     string
 	CreatedAt time.Time
