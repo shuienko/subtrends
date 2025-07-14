@@ -57,7 +57,7 @@
                         
                         <div class="list-group">
                             {{range .History}}
-                            <button class="list-group-item list-group-item-action history-list-item d-flex align-items-center" onclick="analyzeSubreddit('{{.}}')">
+                            <button class="list-group-item list-group-item-action history-list-item d-flex align-items-center" onclick="redirectToAnalyze('{{.}}')">
                                 <i class="fas fa-globe me-3 text-primary"></i>
                                 <span class="fw-medium">r/{{.}}</span>
                                 <i class="fas fa-chevron-right ms-auto text-muted"></i>

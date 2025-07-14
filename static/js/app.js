@@ -5,6 +5,13 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeAnalyzeForm();
     initializeModelForm();
     restoreResults(); // Restore results on page load
+    
+    // Check for auto-analyze subreddit from history
+    const autoAnalyzeSubreddit = sessionStorage.getItem('autoAnalyzeSubreddit');
+    if (autoAnalyzeSubreddit) {
+        sessionStorage.removeItem('autoAnalyzeSubreddit');
+        analyzeSubreddit(autoAnalyzeSubreddit);
+    }
 });
 
 // Initialize the analyze form
@@ -99,6 +106,14 @@ function changeModel(model) {
         showAlert('Failed to change model. Please try again.', 'danger');
         console.error('Error:', error);
     });
+}
+
+// Redirect to home page and analyze subreddit
+function redirectToAnalyze(subreddit) {
+    // Store the subreddit to analyze in sessionStorage
+    sessionStorage.setItem('autoAnalyzeSubreddit', subreddit);
+    // Redirect to home page
+    window.location.href = '/';
 }
 
 // Clear history
