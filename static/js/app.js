@@ -1,5 +1,9 @@
 // SubTrends Web Application JavaScript
 
+// WebSocket connection and progress tracking
+let progressSocket = null;
+let useWebSocket = true;
+
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize form handlers
     initializeAnalyzeForm();
@@ -55,6 +59,66 @@ function analyzeSubreddit(subreddit) {
     showLoading();
     hideError();
     hideResults();
+    
+    // Try WebSocket first, fallback to HTTP
+    if (useWebSocket && 'WebSocket' in window) {
+        analyzeWithWebSocket(subreddit);
+    } else {
+        analyzeWithHTTP(subreddit);
+    }
+}
+
+// Analyze with WebSocket for real-time progress
+function analyzeWithWebSocket(subreddit) {
+    // Show progress UI
+    showProgressUI();
+    
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    try {
+        progressSocket = new WebSocket(wsUrl);
+        
+        progressSocket.onopen = function() {
+            console.log('WebSocket connected');
+            updateProgress('connecting', 0, 'Connecting to server...');
+            
+            // Send analysis request
+            progressSocket.send(JSON.stringify({
+                subreddit: subreddit
+            }));
+        };
+        
+        progressSocket.onmessage = function(event) {
+            try {
+                const message = JSON.parse(event.data);
+                handleProgressMessage(message);
+            } catch (e) {
+                console.error('Failed to parse WebSocket message:', e);
+            }
+        };
+        
+        progressSocket.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            closeWebSocket();
+            showError('Real-time connection failed. Trying standard analysis...');
+            setTimeout(() => analyzeWithHTTP(subreddit), 1000);
+        };
+        
+        progressSocket.onclose = function() {
+            console.log('WebSocket closed');
+            progressSocket = null;
+        };
+        
+    } catch (error) {
+        console.error('WebSocket connection failed:', error);
+        analyzeWithHTTP(subreddit);
+    }
+}
+
+// Analyze with HTTP (fallback method)
+function analyzeWithHTTP(subreddit) {
+    hideProgressUI();
     
     // Prepare form data
     const formData = new FormData();
@@ -302,6 +366,110 @@ function showAlert(message, type) {
                 alertDiv.remove();
             }
         }, 5000);
+    }
+}
+
+// Handle WebSocket progress messages
+function handleProgressMessage(message) {
+    console.log('Progress message:', message);
+    
+    switch (message.type) {
+        case 'progress':
+            updateProgress(message.stage, message.progress, message.message, message.estimated_time);
+            break;
+        case 'complete':
+            hideProgressUI();
+            hideLoading();
+            showResults(message.data);
+            closeWebSocket();
+            break;
+        case 'error':
+            hideProgressUI();
+            hideLoading();
+            showError(message.error);
+            closeWebSocket();
+            break;
+    }
+}
+
+// Update progress display
+function updateProgress(stage, progress, message, estimatedTime) {
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const stageIndicator = document.getElementById('stageIndicator');
+    const timeEstimate = document.getElementById('timeEstimate');
+    
+    if (progressBar) {
+        progressBar.style.width = progress + '%';
+        progressBar.setAttribute('aria-valuenow', progress);
+    }
+    
+    if (progressText) {
+        progressText.textContent = message;
+    }
+    
+    if (stageIndicator) {
+        updateStageIndicator(stage);
+    }
+    
+    if (timeEstimate && estimatedTime) {
+        timeEstimate.textContent = `Estimated time: ${estimatedTime}s`;
+        timeEstimate.classList.remove('d-none');
+    } else if (timeEstimate) {
+        timeEstimate.classList.add('d-none');
+    }
+}
+
+// Update stage indicator
+function updateStageIndicator(currentStage) {
+    const stages = ['connecting', 'fetching_posts', 'fetching_comments', 'generating_summary', 'complete'];
+    const stageNames = {
+        'connecting': 'Connecting',
+        'fetching_posts': 'Fetching Posts',
+        'fetching_comments': 'Loading Comments', 
+        'generating_summary': 'AI Processing',
+        'complete': 'Complete'
+    };
+    
+    stages.forEach((stage, index) => {
+        const element = document.getElementById(`stage-${stage}`);
+        if (element) {
+            element.classList.remove('active', 'completed');
+            
+            if (stage === currentStage) {
+                element.classList.add('active');
+            } else if (stages.indexOf(currentStage) > index) {
+                element.classList.add('completed');
+            }
+        }
+    });
+}
+
+// Show progress UI
+function showProgressUI() {
+    const progressContainer = document.getElementById('progressContainer');
+    if (progressContainer) {
+        progressContainer.classList.remove('d-none');
+    }
+    
+    // Hide regular loading
+    hideLoading();
+}
+
+// Hide progress UI
+function hideProgressUI() {
+    const progressContainer = document.getElementById('progressContainer');
+    if (progressContainer) {
+        progressContainer.classList.add('d-none');
+    }
+}
+
+// Close WebSocket connection
+function closeWebSocket() {
+    if (progressSocket) {
+        progressSocket.close();
+        progressSocket = null;
     }
 }
 
