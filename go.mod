@@ -5,6 +5,7 @@ go 1.23.4
 require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/gorilla/sessions v1.2.2
+	github.com/gorilla/websocket v1.5.3
 	golang.org/x/time v0.5.0
 )
 

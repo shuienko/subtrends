@@ -101,6 +101,7 @@ func (ws *WebServer) setupRoutes() {
 	// Routes
 	ws.router.GET("/", ws.handleHome)
 	ws.router.POST("/analyze", ws.handleAnalyze)
+	ws.router.GET("/ws", ws.handleWebSocket)
 	ws.router.GET("/history", ws.handleHistory)
 	ws.router.POST("/clear-history", ws.handleClearHistory)
 	ws.router.GET("/model", ws.handleModelGet)
