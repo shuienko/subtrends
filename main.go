@@ -7,43 +7,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"syscall"
 	"time"
 )
-
-// Config holds the application configuration
-type Config struct {
-	Port            string
-	StaticFilesPath string
-	SessionSecret   string
-	TemplatePath    string
-	ShutdownTimeout time.Duration
-}
-
-// LoadConfig loads configuration from environment variables
-func LoadConfig() (*Config, error) {
-	// Web server configuration
-	port := getEnvOrDefault("PORT", "8080")
-	staticFilesPath := getEnvOrDefault("STATIC_FILES_PATH", "./static")
-	sessionSecret := getEnvOrDefault("SESSION_SECRET", "your-secret-key-change-in-production")
-	templatePath := getEnvOrDefault("TEMPLATE_PATH", "./templates")
-
-	// Shutdown timeout with default
-	shutdownTimeoutStr := getEnvOrDefault("SHUTDOWN_TIMEOUT_SECONDS", "5")
-	shutdownTimeout, err := strconv.Atoi(shutdownTimeoutStr)
-	if err != nil {
-		shutdownTimeout = 5 // Default to 5 seconds
-	}
-
-	return &Config{
-		Port:            port,
-		StaticFilesPath: staticFilesPath,
-		SessionSecret:   sessionSecret,
-		TemplatePath:    templatePath,
-		ShutdownTimeout: time.Duration(shutdownTimeout) * time.Second,
-	}, nil
-}
 
 // ensureDataDirectory creates the data directory if it doesn't exist
 func ensureDataDirectory() error {
@@ -63,21 +29,17 @@ func ensureDataDirectory() error {
 }
 
 func main() {
-	// Load configuration
-	config, err := LoadConfig()
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
-	}
+	log.Println("Starting SubTrends Discord Bot...")
 
 	// Ensure data directory exists
 	if err := ensureDataDirectory(); err != nil {
 		log.Fatalf("Failed to create data directory: %v", err)
 	}
 
-	// Create web server instance
-	server, err := NewWebServer(config)
+	// Create Discord bot instance
+	bot, err := NewDiscordBot()
 	if err != nil {
-		log.Fatalf("Failed to create web server: %v", err)
+		log.Fatalf("Failed to create Discord bot: %v", err)
 	}
 
 	// Create a context that will be canceled on interrupt
@@ -88,26 +50,28 @@ func main() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 
-	// Start server in a goroutine
+	// Start bot in a goroutine
 	go func() {
-		if err := server.Start(ctx); err != nil {
-			log.Printf("Server stopped with error: %v", err)
+		if err := bot.Start(ctx); err != nil {
+			log.Printf("Bot stopped with error: %v", err)
 			cancel()
 		}
 	}()
 
+	log.Println("SubTrends Discord Bot is now running. Press CTRL-C to exit.")
+
 	// Wait for termination signal
 	<-signalChan
-	log.Println("Shutdown signal received, stopping server...")
+	log.Println("Shutdown signal received, stopping bot...")
 
 	// Create a context with timeout for graceful shutdown
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), config.ShutdownTimeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 
-	// Stop the server
-	if err := server.Stop(shutdownCtx); err != nil {
+	// Stop the bot
+	if err := bot.Stop(shutdownCtx); err != nil {
 		log.Printf("Error during shutdown: %v", err)
 	}
 
-	log.Println("Server has been gracefully stopped")
+	log.Println("Bot has been gracefully stopped")
 }

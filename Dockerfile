@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN go build -o web .
+RUN go build -o subtrends-bot .
 
 # Final stage
 FROM alpine:3.19
@@ -26,21 +26,10 @@ RUN apk --no-cache add ca-certificates
 WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder /app/web .
+COPY --from=builder /app/subtrends-bot .
 
-# Create directories for templates and static files
-RUN mkdir -p templates static/css static/js
+# Create data directory for token cache
+RUN mkdir -p data
 
-# Copy templates and static files
-COPY templates/ templates/
-COPY static/ static/
-
-# Expose port
-EXPOSE 8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
-
-# Command to run the web server
-CMD ["./web"]
+# Command to run the Discord bot
+CMD ["./subtrends-bot"]
