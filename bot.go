@@ -133,6 +133,15 @@ func (bot *DiscordBot) ready(s *discordgo.Session, event *discordgo.Ready) {
 
 // registerCommands registers slash commands with Discord
 func (bot *DiscordBot) registerCommands() error {
+	// Dynamically create model choices from availableModels
+	modelChoices := make([]*discordgo.ApplicationCommandOptionChoice, len(availableModels))
+	for i, model := range availableModels {
+		modelChoices[i] = &discordgo.ApplicationCommandOptionChoice{
+			Name:  fmt.Sprintf("%s (%s)", model.Name, model.Description),
+			Value: model.Codename,
+		}
+	}
+
 	commands := []*discordgo.ApplicationCommand{
 		{
 			Name:        "trend",
@@ -155,20 +164,7 @@ func (bot *DiscordBot) registerCommands() error {
 					Name:        "model",
 					Description: "Choose AI model",
 					Required:    true,
-					Choices: []*discordgo.ApplicationCommandOptionChoice{
-						{
-							Name:  "Haiku 3 (Fast)",
-							Value: "haiku3",
-						},
-						{
-							Name:  "Haiku 3.5 (Balanced)",
-							Value: "haiku35",
-						},
-						{
-							Name:  "Sonnet 4 (Most Capable)",
-							Value: "sonnet4",
-						},
-					},
+					Choices:     modelChoices,
 				},
 			},
 		},
@@ -361,7 +357,7 @@ func (bot *DiscordBot) handleTrendAnalysis(s *discordgo.Session, channelID, user
 		return
 	}
 
-	data, err := subredditData(subreddit, token)
+	data, posts, err := subredditData(subreddit, token)
 	if err != nil {
 		log.Printf("Failed to get subreddit data: %v", err)
 		bot.sendMessage(s, channelID, fmt.Sprintf("❌ Failed to analyze r/%s: %v", subreddit, err))
@@ -369,18 +365,11 @@ func (bot *DiscordBot) handleTrendAnalysis(s *discordgo.Session, channelID, user
 	}
 
 	// Generate summary
-	summary, err := summarizePosts(data, session.Model)
+	summary, err := summarizePosts(subreddit, data, session.Model)
 	if err != nil {
 		log.Printf("Failed to generate summary: %v", err)
 		bot.sendMessage(s, channelID, "❌ Failed to generate AI summary")
 		return
-	}
-
-	// Get post links
-	posts, err := fetchTopPosts(subreddit, token)
-	if err != nil {
-		log.Printf("Failed to fetch posts for links: %v", err)
-		posts = []RedditPost{} // Ensure posts is never nil
 	}
 
 	// Format and send response
@@ -442,7 +431,7 @@ func (bot *DiscordBot) handleModelSlashCommand(s *discordgo.Session, i *discordg
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("✅ Model changed to **%s** (%s)", selectedModel.Description, selectedModel.Codename),
+			Content: fmt.Sprintf("✅ Model changed to **%s** (%s)", selectedModel.Name, selectedModel.Description),
 		},
 	})
 	if err != nil {

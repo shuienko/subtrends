@@ -18,6 +18,7 @@ type Config struct {
 	AnthropicRequestsPerMinute int
 	AnthropicBurstSize         int
 	SummaryHeader              string
+	AnthropicAPIKey            string
 
 	// Reddit API settings
 	RedditBaseURL            string
@@ -33,6 +34,8 @@ type Config struct {
 	RedditConcurrentRequests int
 	RedditUserAgent          string
 	RedditPublicURL          string
+	RedditClientID           string
+	RedditClientSecret       string
 
 	// Discord Bot settings
 	DiscordMessageSplitLength int
@@ -60,6 +63,7 @@ func LoadConfig() {
 		AnthropicRequestsPerMinute: getEnvAsInt("ANTHROPIC_REQUESTS_PER_MINUTE", 10),
 		AnthropicBurstSize:         getEnvAsInt("ANTHROPIC_BURST_SIZE", 3),
 		SummaryHeader:              getEnv("SUMMARY_HEADER", "📱 *REDDIT PULSE* 📱\n\n"),
+		AnthropicAPIKey:            getEnv("ANTHROPIC_API_KEY", ""),
 
 		// Reddit
 		RedditBaseURL:            getEnv("REDDIT_BASE_URL", "https://oauth.reddit.com"),
@@ -75,6 +79,8 @@ func LoadConfig() {
 		RedditConcurrentRequests: getEnvAsInt("REDDIT_CONCURRENT_REQUESTS", 3),
 		RedditUserAgent:          getEnv("REDDIT_USER_AGENT", "SubTrends/1.0"),
 		RedditPublicURL:          getEnv("REDDIT_PUBLIC_URL", "https://reddit.com"),
+		RedditClientID:           getEnv("REDDIT_CLIENT_ID", ""),
+		RedditClientSecret:       getEnv("REDDIT_CLIENT_SECRET", ""),
 
 		// Discord Bot
 		SessionFilePath:           getEnv("SESSION_FILE_PATH", "data/sessions.json"),

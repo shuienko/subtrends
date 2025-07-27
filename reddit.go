@@ -13,9 +13,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// Constants for rate limiting and API endpoints
-const ()
-
 var (
 	// Token caching
 	tokenMutex      sync.RWMutex
@@ -148,6 +145,10 @@ func getRedditAccessToken() (string, error) {
 	}
 	tokenMutex.RUnlock()
 
+	// Acquire write lock
+	tokenMutex.Lock()
+	defer tokenMutex.Unlock()
+
 	// Double-check after acquiring write lock
 	if time.Now().Add(AppConfig.RedditTokenExpiryBuffer).Before(tokenExpiration) && cachedToken != "" {
 		log.Printf("INFO: Using cached Reddit access token, expires in %v", time.Until(tokenExpiration))
@@ -156,13 +157,8 @@ func getRedditAccessToken() (string, error) {
 
 	log.Printf("INFO: Requesting new Reddit access token")
 
-	clientID, err := GetRequiredEnvVar("REDDIT_CLIENT_ID")
-	if err != nil {
-		return "", err
-	}
-	clientSecret, err := GetRequiredEnvVar("REDDIT_CLIENT_SECRET")
-	if err != nil {
-		return "", err
+	if AppConfig.RedditClientID == "" || AppConfig.RedditClientSecret == "" {
+		return "", fmt.Errorf("Reddit client ID or secret is not configured")
 	}
 
 	data := strings.NewReader("grant_type=client_credentials")
@@ -171,7 +167,7 @@ func getRedditAccessToken() (string, error) {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.SetBasicAuth(clientID, clientSecret)
+	req.SetBasicAuth(AppConfig.RedditClientID, AppConfig.RedditClientSecret)
 	req.Header.Set("User-Agent", AppConfig.RedditUserAgent)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
@@ -328,12 +324,12 @@ func fetchTopComments(permalink, token string) ([]string, error) {
 }
 
 // subredditData fetches data from a subreddit and formats it for summarization
-func subredditData(subreddit, token string) (string, error) {
+func subredditData(subreddit, token string) (string, []RedditPost, error) {
 	log.Printf("INFO: Starting data collection for subreddit: r/%s", strings.TrimPrefix(subreddit, "r/"))
 
 	posts, err := fetchTopPosts(subreddit, token)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch posts: %w", err)
+		return "", nil, fmt.Errorf("failed to fetch posts: %w", err)
 	}
 
 	var builder strings.Builder
@@ -415,5 +411,5 @@ func subredditData(subreddit, token string) (string, error) {
 	}
 
 	log.Printf("INFO: Completed data collection for r/%s with %d posts", cleanSubredditName, len(posts))
-	return builder.String(), nil
+	return builder.String(), posts, nil
 }

@@ -16,11 +16,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const (
-	// Environment variable names
-	envAnthropicAPIKey = "ANTHROPIC_API_KEY"
-)
-
 // promptTemplate defines the template for the summarization request
 const promptTemplate = `Please provide an engaging and fun summary of these Reddit posts and discussions from r/%s. 
 
@@ -81,24 +76,22 @@ type AnthropicResponse struct {
 }
 
 // summarizePosts takes a string of Reddit posts and returns a summarized version using the Anthropic API
-func summarizePosts(text string, model string) (string, error) {
+func summarizePosts(subreddit, text string, model string) (string, error) {
 	log.Printf("INFO: Making Anthropic API call with model: %s", model)
 
-	// Get API key from environment
-	apiKey, err := GetRequiredEnvVar(envAnthropicAPIKey)
-	if err != nil {
-		return "", err
+	if AppConfig.AnthropicAPIKey == "" {
+		return "", fmt.Errorf("Anthropic API key is not configured")
 	}
 
 	// Prepare the API request
-	request := createAnthropicRequest(model, text)
+	request := createAnthropicRequest(model, text, subreddit)
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), AppConfig.AnthropicRequestTimeout)
 	defer cancel()
 
 	// Make the API call
-	response, err := makeAnthropicAPICall(ctx, request, apiKey)
+	response, err := makeAnthropicAPICall(ctx, request, AppConfig.AnthropicAPIKey)
 	if err != nil {
 		return "", fmt.Errorf("API call failed: %w", err)
 	}
@@ -108,20 +101,7 @@ func summarizePosts(text string, model string) (string, error) {
 }
 
 // createAnthropicRequest creates a request structure for the Anthropic API
-func createAnthropicRequest(model, text string) AnthropicRequest {
-	// Extract subreddit name from the text
-	subredditName := "unknown"
-	lines := strings.Split(text, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "# Top posts from r/") {
-			parts := strings.Split(line, "r/")
-			if len(parts) > 1 {
-				subredditName = strings.TrimSpace(parts[1])
-				break
-			}
-		}
-	}
-
+func createAnthropicRequest(model, text, subredditName string) AnthropicRequest {
 	// Format the prompt with the Reddit data and subreddit name
 	prompt := fmt.Sprintf(promptTemplate, subredditName, text)
 
