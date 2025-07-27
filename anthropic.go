@@ -10,32 +10,10 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"golang.org/x/time/rate"
-)
-
-const (
-	// API related constants
-	anthropicAPIEndpoint = "https://api.anthropic.com/v1/messages"
-	anthropicAPIVersion  = "2023-06-01"
-
-	// Environment variable names
-	envAnthropicAPIKey = "ANTHROPIC_API_KEY"
-
-	// Request parameters
-	defaultMaxTokens   = 1500
-	defaultTemperature = 0.7
-	requestTimeout     = 45 * time.Second
-
-	// Output formatting
-	summaryHeader = "📱 *REDDIT PULSE* 📱\n\n"
-
-	// Rate limiting
-	anthropicRequestsPerMinute = 10
-	anthropicBurstSize         = 3
 )
 
 // promptTemplate defines the template for the summarization request
@@ -65,8 +43,13 @@ Posts to analyze:
 
 var (
 	// Rate limiter for Anthropic API
-	anthropicLimiter = rate.NewLimiter(rate.Every(time.Minute/time.Duration(anthropicRequestsPerMinute)), anthropicBurstSize)
+	anthropicLimiter *rate.Limiter
 )
+
+func InitializeAnthropicRateLimiter() {
+	// Initialize the rate limiter from config
+	anthropicLimiter = rate.NewLimiter(rate.Every(time.Minute/time.Duration(AppConfig.AnthropicRequestsPerMinute)), AppConfig.AnthropicBurstSize)
+}
 
 // Message represents a single message in the conversation with Claude
 type Message struct {
@@ -93,24 +76,22 @@ type AnthropicResponse struct {
 }
 
 // summarizePosts takes a string of Reddit posts and returns a summarized version using the Anthropic API
-func summarizePosts(text string, model string) (string, error) {
+func summarizePosts(subreddit, text string, model string) (string, error) {
 	log.Printf("INFO: Making Anthropic API call with model: %s", model)
 
-	// Get API key from environment
-	apiKey, err := getRequiredEnvVar(envAnthropicAPIKey)
-	if err != nil {
-		return "", err
+	if AppConfig.AnthropicAPIKey == "" {
+		return "", fmt.Errorf("Anthropic API key is not configured")
 	}
 
 	// Prepare the API request
-	request := createAnthropicRequest(model, text)
+	request := createAnthropicRequest(model, text, subreddit)
 
 	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), AppConfig.AnthropicRequestTimeout)
 	defer cancel()
 
 	// Make the API call
-	response, err := makeAnthropicAPICall(ctx, request, apiKey)
+	response, err := makeAnthropicAPICall(ctx, request, AppConfig.AnthropicAPIKey)
 	if err != nil {
 		return "", fmt.Errorf("API call failed: %w", err)
 	}
@@ -119,30 +100,8 @@ func summarizePosts(text string, model string) (string, error) {
 	return formatResponse(response)
 }
 
-// getRequiredEnvVar returns the value of a required environment variable or an error if not set
-func getRequiredEnvVar(key string) (string, error) {
-	value := os.Getenv(key)
-	if value == "" {
-		return "", ErrMissingEnvVar(key)
-	}
-	return value, nil
-}
-
 // createAnthropicRequest creates a request structure for the Anthropic API
-func createAnthropicRequest(model, text string) AnthropicRequest {
-	// Extract subreddit name from the text
-	subredditName := "unknown"
-	lines := strings.Split(text, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "# Top posts from r/") {
-			parts := strings.Split(line, "r/")
-			if len(parts) > 1 {
-				subredditName = strings.TrimSpace(parts[1])
-				break
-			}
-		}
-	}
-
+func createAnthropicRequest(model, text, subredditName string) AnthropicRequest {
 	// Format the prompt with the Reddit data and subreddit name
 	prompt := fmt.Sprintf(promptTemplate, subredditName, text)
 
@@ -155,8 +114,8 @@ func createAnthropicRequest(model, text string) AnthropicRequest {
 				Content: prompt,
 			},
 		},
-		MaxTokens:   defaultMaxTokens,
-		Temperature: defaultTemperature,
+		MaxTokens:   AppConfig.AnthropicMaxTokens,
+		Temperature: AppConfig.AnthropicTemperature,
 	}
 }
 
@@ -174,7 +133,7 @@ func makeAnthropicAPICall(ctx context.Context, request AnthropicRequest, apiKey 
 	}
 
 	// Create the HTTP request
-	req, err := http.NewRequestWithContext(ctx, "POST", anthropicAPIEndpoint, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", AppConfig.AnthropicAPIEndpoint, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
@@ -182,11 +141,11 @@ func makeAnthropicAPICall(ctx context.Context, request AnthropicRequest, apiKey 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
-	req.Header.Set("anthropic-version", anthropicAPIVersion)
+	req.Header.Set("anthropic-version", AppConfig.AnthropicAPIVersion)
 
 	// Create HTTP client with timeout
 	client := &http.Client{
-		Timeout: requestTimeout,
+		Timeout: AppConfig.AnthropicRequestTimeout,
 	}
 
 	// Send the request
@@ -248,5 +207,5 @@ func formatResponse(response *AnthropicResponse) (string, error) {
 	}
 
 	// Format the response with a header
-	return summaryHeader + text, nil
+	return AppConfig.SummaryHeader + text, nil
 }

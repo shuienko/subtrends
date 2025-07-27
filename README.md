@@ -1,224 +1,140 @@
-# 📊 SubTrends - Your Reddit Crystal Ball 🔮
+# SubTrends
 
-> *Discover what's really happening on Reddit with AI-powered insights*
+> Your personal Reddit trend analyst, right in your Discord server.
 
-SubTrends transforms the chaos of Reddit into crystal-clear insights! 🚀 Our smart web app dives deep into any subreddit and emerges with bite-sized summaries that actually make sense. No more endless scrolling through comment threads – just pure, distilled Reddit wisdom.
+SubTrends is a Discord bot that provides AI-powered summaries of trending topics in any subreddit. It leverages the Anthropic Claude API to deliver insightful and engaging analysis of the latest posts and discussions, helping you stay ahead of the curve.
 
----
+## 🚀 Features
 
-## ✨ What Makes SubTrends Awesome
+-   **Subreddit Analysis**: Get a comprehensive summary of any subreddit's recent hot topics.
+-   **AI-Powered Summaries**: Uses state-of-the-art language models from Anthropic (Claude 3 Haiku, Sonnet) to generate summaries.
+-   **Top Post Links**: Includes links to the top posts analyzed for quick access to the source material.
+-   **Model Selection**: Choose the AI model that best fits your needs for speed or analytical depth.
+-   **Usage History**: Keep track of the subreddits you've analyzed.
+-   **Simple Slash Commands**: Easy-to-use Discord slash commands.
+-   **Configurable**: Easily configure the bot using environment variables.
+-   **Docker Support**: Comes with a `Dockerfile` for easy deployment.
 
-🎯 **Subreddit X-Ray Vision** - Point us at any subreddit and watch the magic happen  
-🧠 **AI-Powered Insights** - Multiple Claude models to match your analysis needs  
-📚 **Personal History Hub** - Never lose track of your discoveries  
-⚡ **Lightning Fast** - Real-time processing with smooth progress indicators  
-📱 **Mobile-First Design** - Looks gorgeous on any device  
-🛡️ **Smart Rate Limiting** - Plays nice with APIs (and won't get you banned!)
+## ⚙️ How It Works
 
----
+The bot follows a simple workflow:
 
-## 🛠️ Tech Stack That Powers the Magic
+1.  A user invokes the `/trend` command in a Discord server.
+2.  The bot fetches the top posts and comments from the specified subreddit using the Reddit API.
+3.  The collected data is sent to the Anthropic API for analysis and summarization.
+4.  The AI-generated summary is formatted and sent back to the Discord channel.
 
-| Component | Technology | Why It's Awesome |
-|-----------|------------|------------------|
-| 🚀 **Backend** | Go + Gin | Blazing fast, rock solid |
-| 🎨 **Frontend** | HTML5 + CSS3 + Bootstrap 5 | Clean, responsive, beautiful |
-| 🤖 **AI Brain** | Anthropic Claude API | The smartest summarization on the planet |
-| 📡 **Data Source** | Reddit API | Fresh content, straight from the source |
-| 🍪 **Sessions** | Gorilla Sessions | Secure, stateful user experience |
+```mermaid
+graph TD
+    A[User on Discord] -- /trend subreddit --> B(SubTrends Bot);
+    B -- Fetch top posts/comments --> C(Reddit API);
+    C -- Returns data --> B;
+    B -- Send data for summary --> D(Anthropic API);
+    D -- Returns summary --> B;
+    B -- Post summary --> A;
+```
 
-## 🚀 Quick Start Guide
+## 🤖 Discord Commands
 
-### 📋 What You'll Need
+Use these slash commands to interact with the bot:
 
-- 🐹 **Go 1.23+** - The language that makes everything fast
-- 🔑 **Reddit API credentials** - Your ticket to the Reddit universe
-- 🤖 **Anthropic API key** - The brain behind the magic
+-   `/trend <subreddit>`: Analyzes a subreddit and provides a trend summary.
+    -   `subreddit`: The name of the subreddit (e.g., `golang` not `r/golang`).
+-   `/model <model>`: Changes the AI model used for analysis. Available models:
+    -   `haiku3`: Claude 3 Haiku (Fast and efficient)
+    -   `haiku35`: Claude 3.5 Haiku (Balanced performance)
+    -   `sonnet4`: Claude 3 Sonnet (Most capable for complex tasks)
+-   `/history`: Displays your last 25 analyzed subreddits.
+-   `/clear`: Clears your analysis history.
 
-### 🔧 Environment Setup
+## 🛠️ Setup and Installation
 
-Create these environment variables to unlock the full power:
+### Prerequisites
+
+-   [Go](https://golang.org/doc/install) (version 1.18 or newer)
+-   [Docker](https://www.docker.com/get-started) (optional, for containerized deployment)
+-   A Reddit App (for API credentials)
+-   A Discord Bot Application (for bot token)
+-   An Anthropic API Key
+
+### 1. Clone the Repository
 
 ```bash
-# 🔴 Required (The Holy Trinity)
+git clone https://github.com/your-username/subtrends.git
+cd subtrends
+```
+
+### 2. Configure Environment Variables
+
+Create a `.env` file in the root of the project and populate it with your credentials and custom settings. You can use the example below as a template.
+
+```dotenv
+# .env file
+# Get these from your Discord Developer Portal application
+DISCORD_BOT_TOKEN=your_discord_bot_token
+
+# Get these from your Reddit App preferences (https://www.reddit.com/prefs/apps)
 REDDIT_CLIENT_ID=your_reddit_client_id
 REDDIT_CLIENT_SECRET=your_reddit_client_secret
+
+# Get this from your Anthropic account dashboard
 ANTHROPIC_API_KEY=your_anthropic_api_key
 
-# 🟡 Optional (But Nice to Have)
-PORT=8080                                    # Where the magic happens
-SESSION_SECRET=your-secret-key-change-me     # Keep your sessions secure
-STATIC_FILES_PATH=./static                   # Where the pretty stuff lives
-TEMPLATE_PATH=./templates                    # HTML template location
-HISTORY_FILE_PATH=data/subreddit_history.txt # Your analysis archive
-SHUTDOWN_TIMEOUT_SECONDS=5                   # Graceful goodbye time
+# --- Optional Settings ---
+# You can override the default values from config.go
+REDDIT_POST_LIMIT=7
+REDDIT_COMMENT_LIMIT=7
+REDDIT_TIMEFRAME=day # (day, week, month, year, all)
 ```
 
-### 💻 Local Development (The Classic Way)
+The bot can be configured further using the variables listed in the [Configuration](#-configuration) section.
+
+### 3. Run the Application
+
+#### Using Go
 
 ```bash
-# 1️⃣ Grab the code
-git clone <repository-url>
-cd subtrends
-
-# 2️⃣ Feed it your secrets
-export REDDIT_CLIENT_ID=your_reddit_client_id
-export REDDIT_CLIENT_SECRET=your_reddit_client_secret
-export ANTHROPIC_API_KEY=your_anthropic_api_key
-
-# 3️⃣ Get the dependencies
+# Install dependencies
 go mod tidy
 
-# 4️⃣ Fire it up! 🔥
+# Run the bot
 go run .
-
-# 5️⃣ Open the magic portal
-# Navigate to http://localhost:8080
 ```
 
-### 🐳 Docker Deployment (The Cool Way)
+#### Using Docker
+
+Build and run the Docker container:
 
 ```bash
-# Build your container empire
+# Build the Docker image
 docker build -t subtrends .
 
-# Launch into orbit! 🚀
-docker run -p 8080:8080 \
-  -e REDDIT_CLIENT_ID=your_reddit_client_id \
-  -e REDDIT_CLIENT_SECRET=your_reddit_client_secret \
-  -e ANTHROPIC_API_KEY=your_anthropic_api_key \
-  subtrends
+# Run the container with the environment variables
+docker run --env-file .env --name subtrends-bot -d subtrends
 ```
 
-## 🎮 How to Use Your New Superpower
+## 🔩 Configuration
 
-### 🔍 Analyzing Subreddits (The Main Event)
+The application is configured via environment variables. The following variables are available:
 
-1. 📝 **Type a subreddit name** - Works with or without "r/" (we're flexible like that)
-2. 🚀 **Hit "Analyze"** - Watch the loading animation do its thing
-3. ⏳ **Grab some coffee** - Our AI is working hard behind the scenes
-4. 📊 **Feast your eyes** - Get trending topics, community pulse, and spicy hot takes
-5. 🔗 **Dive deeper** - Click post links to see the original Reddit chaos
+| Variable                       | Description                                               | Default Value                        |
+| ------------------------------ | --------------------------------------------------------- | ------------------------------------ |
+| **`DISCORD_BOT_TOKEN`**        | **Required.** Your Discord bot token.                     | -                                    |
+| **`REDDIT_CLIENT_ID`**         | **Required.** Your Reddit application client ID.          | -                                    |
+| **`REDDIT_CLIENT_SECRET`**     | **Required.** Your Reddit application client secret.      | -                                    |
+| **`ANTHROPIC_API_KEY`**        | **Required.** Your Anthropic API key.                     | -                                    |
+| `ANTHROPIC_API_ENDPOINT`       | Anthropic API endpoint URL.                               | `https://api.anthropic.com/v1/messages` |
+| `ANTHROPIC_MAX_TOKENS`         | Max tokens for the AI-generated summary.                  | `1500`                               |
+| `REDDIT_POST_LIMIT`            | Number of top posts to fetch from a subreddit.            | `7`                                  |
+| `REDDIT_COMMENT_LIMIT`         | Number of top comments to fetch from each post.           | `7`                                  |
+| `REDDIT_TIMEFRAME`             | Timeframe for fetching top posts (`day`, `week`, `all`).  | `day`                                |
+| `SESSION_FILE_PATH`            | Path to store user session data.                          | `data/sessions.json`                 |
+| `SHUTDOWN_TIMEOUT`             | Graceful shutdown timeout.                                | `5s`                                 |
 
-### 📚 Managing Your Discovery History
+## 💻 Technology Stack
 
-- 👀 **Browse past analyses** - Never lose a great discovery
-- 🔄 **Re-analyze favorites** - One click to refresh any subreddit
-- 🧹 **Clean slate** - Clear your history when you need a fresh start
-
-### 🧠 Switching AI Models
-
-Choose your fighter! Each model has its own personality:
-- 🏃‍♂️ **Haiku 3** - Lightning fast, perfect for quick insights
-- ⚖️ **Haiku 3.5** - The goldilocks option (just right)
-- 🧙‍♂️ **Sonnet 4** - The wise sage for complex communities
-
-## 🛣️ API Routes (For the Curious)
-
-| Route | Method | What It Does |
-|-------|--------|--------------|
-| `/` | GET | 🏠 The main stage where magic happens |
-| `/analyze` | POST | 🔬 The brain surgery endpoint |
-| `/history` | GET | 📖 Your personal analysis library |
-| `/clear-history` | POST | 🗑️ The reset button |
-| `/model` | GET | 🎭 Model selection theater |
-| `/model` | POST | 🔄 Switch your AI companion |
-| `/health` | GET | 💊 System pulse check |
-
----
-
-## 🏗️ Under the Hood
-
-### 🧩 The Core Squad
-
-| Component | File | Superpower |
-|-----------|------|------------|
-| 🌐 **Web Server** | `web.go` | Gin-powered HTTP magic |
-| 🔗 **Reddit Connector** | `reddit.go` | API wizardry with smart rate limiting |
-| 🤖 **AI Brain** | `anthropic.go` | Claude integration that just works |
-| ⚙️ **Mission Control** | `main.go` | The conductor of this orchestra |
-| 🎨 **Pretty Pages** | `templates/` | HTML that doesn't hurt your eyes |
-| ✨ **Style & Flair** | `static/` | CSS and JS that sparks joy |
-
-### 🌊 The Data Journey
-
-```
-User Input → Validation → Reddit API → AI Processing → Pretty Results → Happy User! 🎉
-     ↓
-Session Magic → History Storage → Future Reference
-```
-
-### ⚡ Performance & Limits
-
-We play nice with everyone:
-
-- 🐌 **Reddit API**: 1 request/second (burst of 5) - Steady and respectful
-- 🧠 **Anthropic API**: 10 requests/minute (burst of 3) - Quality over quantity
-
-## 🛠️ Development Zone
-
-### 📁 Project Map
-
-```
-subtrends/
-├── 🚀 main.go              # The launchpad
-├── 🌐 web.go               # HTTP server & route magic
-├── 🔗 reddit.go            # Reddit API whisperer
-├── 🤖 anthropic.go         # AI conversation master
-├── 🔧 utils.go             # The Swiss Army knife
-├── 🎨 templates/           # Beautiful HTML homes
-│   ├── layout.html         #   The foundation
-│   ├── index.html          #   The main stage
-│   ├── history.html        #   Memory lane
-│   └── model.html          #   AI selection center
-├── ✨ static/              # Style & interaction
-│   ├── css/style.css       #   The makeup artist
-│   └── js/app.js           #   The interaction maestro
-├── 📦 go.mod               # Dependency manifest
-├── 🐳 Dockerfile           # Container blueprint
-└── 📖 README.md            # You are here!
-```
-
-### 🔨 Building Your Empire
-
-```bash
-# 🏠 Build for your machine
-go build -o web .
-
-# 🌍 Build for the world (Linux)
-GOOS=linux GOARCH=amd64 go build -o web .
-```
-
----
-
-## 🤝 Join the Fun!
-
-Want to make SubTrends even more awesome? Here's how:
-
-1. 🍴 **Fork it** - Make it your own
-2. 🌿 **Branch it** - Create your feature branch  
-3. ✨ **Code it** - Work your magic
-4. 🧪 **Test it** - Make sure it doesn't break
-5. 📤 **PR it** - Share your brilliance!
-
----
-
-## 📜 Legal Stuff
-
-This project rocks the **MIT License** - basically, you can do almost anything with it! Check the LICENSE file for the fine print.
-
-## 🆘 Need Help?
-
-Got questions? Found a bug? Have a brilliant idea? 
-
-**Drop an issue on GitHub** - we're friendly and we don't bite! 🐕
-
----
-
-<div align="center">
-
-**Made with ❤️ and lots of ☕**
-
-*Happy analyzing! 🎉*
-
-</div>
+-   **Backend**: Go
+-   **Discord API Wrapper**: [discordgo](https://github.com/bwmarrin/discordgo)
+-   **AI**: Anthropic Claude API
+-   **Data Source**: Reddit API
+-   **Containerization**: Docker 
