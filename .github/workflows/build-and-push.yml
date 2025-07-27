@@ -3,7 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - main
+    - main
 
 jobs:
   build-and-push:
@@ -33,5 +33,5 @@ jobs:
         context: .
         file: ./Dockerfile
         push: true
-        platforms: linux/arm/v7
+        platforms: linux/arm/v7,linux/amd64
         tags: ${{ secrets.DOCKER_USERNAME }}/subtrends:latest
