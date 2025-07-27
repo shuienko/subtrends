@@ -14,7 +14,8 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN go build -o subtrends-bot .
+ARG TARGETPLATFORM
+RUN GOARCH=$(echo $TARGETPLATFORM | cut -d'/' -f2) GOARM=$(echo $TARGETPLATFORM | cut -d'/' -f3 | sed 's/v//') go build -o subtrends-bot .
 
 # Final stage
 FROM alpine:3.19
