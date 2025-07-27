@@ -10,7 +10,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -97,7 +96,7 @@ func summarizePosts(text string, model string) (string, error) {
 	log.Printf("INFO: Making Anthropic API call with model: %s", model)
 
 	// Get API key from environment
-	apiKey, err := getRequiredEnvVar(envAnthropicAPIKey)
+	apiKey, err := GetRequiredEnvVar(envAnthropicAPIKey)
 	if err != nil {
 		return "", err
 	}
@@ -117,15 +116,6 @@ func summarizePosts(text string, model string) (string, error) {
 
 	// Format and return the response
 	return formatResponse(response)
-}
-
-// getRequiredEnvVar returns the value of a required environment variable or an error if not set
-func getRequiredEnvVar(key string) (string, error) {
-	value := os.Getenv(key)
-	if value == "" {
-		return "", ErrMissingEnvVar(key)
-	}
-	return value, nil
 }
 
 // createAnthropicRequest creates a request structure for the Anthropic API

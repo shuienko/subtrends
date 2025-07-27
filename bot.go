@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -59,9 +57,9 @@ type ModelInfo struct {
 // NewDiscordBot creates a new Discord bot instance
 func NewDiscordBot() (*DiscordBot, error) {
 	// Get Discord bot token from environment
-	token := os.Getenv("DISCORD_BOT_TOKEN")
-	if token == "" {
-		return nil, fmt.Errorf("DISCORD_BOT_TOKEN environment variable is required")
+	token, err := GetRequiredEnvVar("DISCORD_BOT_TOKEN")
+	if err != nil {
+		return nil, err
 	}
 
 	// Create Discord session
@@ -221,7 +219,7 @@ func (bot *DiscordBot) saveUserSession(userID string, session *UserSession) {
 	bot.sessionMutex.Lock()
 	defer bot.sessionMutex.Unlock()
 	bot.userSessions[userID] = session
-	
+
 	// Persist sessions to file
 	go bot.saveSessions()
 }
@@ -235,21 +233,8 @@ func (bot *DiscordBot) saveSessions() {
 	}
 	bot.sessionMutex.RUnlock()
 
-	// Ensure data directory exists
-	if err := os.MkdirAll("data", 0755); err != nil {
-		log.Printf("Error creating data directory: %v", err)
-		return
-	}
-
-	// Write sessions to file
-	data, err := json.MarshalIndent(sessions, "", "  ")
-	if err != nil {
-		log.Printf("Error marshaling sessions: %v", err)
-		return
-	}
-
 	sessionFile := filepath.Join("data", "sessions.json")
-	if err := os.WriteFile(sessionFile, data, 0644); err != nil {
+	if err := WriteJSONFile(sessionFile, sessions); err != nil {
 		log.Printf("Error writing sessions file: %v", err)
 	}
 }
@@ -257,28 +242,25 @@ func (bot *DiscordBot) saveSessions() {
 // loadSessions loads sessions from data/sessions.json
 func (bot *DiscordBot) loadSessions() {
 	sessionFile := filepath.Join("data", "sessions.json")
-	
-	data, err := os.ReadFile(sessionFile)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			log.Printf("Error reading sessions file: %v", err)
-		}
+	var sessions map[string]*UserSession
+
+	if err := ReadJSONFile(sessionFile, &sessions); err != nil {
+		log.Printf("Error reading or parsing sessions file: %v", err)
 		return
 	}
 
-	var sessions map[string]*UserSession
-	if err := json.Unmarshal(data, &sessions); err != nil {
-		log.Printf("Error unmarshaling sessions: %v", err)
+	if sessions == nil {
+		log.Println("No existing sessions found or file is empty.")
 		return
 	}
 
 	bot.sessionMutex.Lock()
 	defer bot.sessionMutex.Unlock()
-	
+
 	for userID, session := range sessions {
 		bot.userSessions[userID] = session
 	}
-	
+
 	log.Printf("Loaded %d user sessions", len(sessions))
 }
 
@@ -482,21 +464,21 @@ func (bot *DiscordBot) handleHistorySlashCommand(s *discordgo.Session, i *discor
 	} else {
 		var builder strings.Builder
 		builder.WriteString("📝 **Your Analysis History**\n\n")
-		
+
 		// Show recent history (last 25)
 		start := 0
 		if len(session.History) > 25 {
 			start = len(session.History) - 25
 		}
-		
+
 		for i := start; i < len(session.History); i++ {
 			builder.WriteString(fmt.Sprintf("• r/%s\n", session.History[i]))
 		}
-		
+
 		if len(session.History) > 25 {
 			builder.WriteString(fmt.Sprintf("\n*Showing last 25 of %d total analyses*", len(session.History)))
 		}
-		
+
 		response = builder.String()
 	}
 
@@ -515,7 +497,7 @@ func (bot *DiscordBot) handleHistorySlashCommand(s *discordgo.Session, i *discor
 func (bot *DiscordBot) handleClearSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	userID := i.Member.User.ID
 	session := bot.getUserSession(userID)
-	
+
 	session.History = make([]string, 0, 50)
 	bot.saveUserSession(userID, session)
 
@@ -541,36 +523,36 @@ func (bot *DiscordBot) sendMessage(s *discordgo.Session, channelID, content stri
 // sendLongMessage splits long messages into chunks under Discord's 2000 character limit
 func (bot *DiscordBot) sendLongMessage(s *discordgo.Session, channelID, content string) {
 	const maxLength = 1900 // Leave some buffer under 2000 limit
-	
+
 	if len(content) <= maxLength {
 		bot.sendMessage(s, channelID, content)
 		return
 	}
-	
+
 	// Split into chunks
 	lines := strings.Split(content, "\n")
 	var currentChunk strings.Builder
-	
+
 	for _, line := range lines {
 		// If adding this line would exceed the limit, send current chunk
-		if currentChunk.Len() + len(line) + 1 > maxLength {
+		if currentChunk.Len()+len(line)+1 > maxLength {
 			if currentChunk.Len() > 0 {
 				bot.sendMessage(s, channelID, currentChunk.String())
 				currentChunk.Reset()
 			}
 		}
-		
+
 		// If a single line is too long, truncate it
 		if len(line) > maxLength {
 			line = line[:maxLength-3] + "..."
 		}
-		
+
 		if currentChunk.Len() > 0 {
 			currentChunk.WriteString("\n")
 		}
 		currentChunk.WriteString(line)
 	}
-	
+
 	// Send remaining content
 	if currentChunk.Len() > 0 {
 		bot.sendMessage(s, channelID, currentChunk.String())

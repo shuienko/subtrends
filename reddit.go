@@ -6,8 +6,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -117,18 +115,7 @@ func saveTokenToFile(token string, expiresIn time.Duration) error {
 		ExpiresAt:   time.Now().Add(time.Second * expiresIn),
 	}
 
-	data, err := json.MarshalIndent(tokenData, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal token data: %w", err)
-	}
-
-	// Ensure the directory exists
-	dir := filepath.Dir(tokenFilePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory for token file: %w", err)
-	}
-
-	if err := os.WriteFile(tokenFilePath, data, 0644); err != nil {
+	if err := WriteJSONFile(tokenFilePath, tokenData); err != nil {
 		return fmt.Errorf("failed to write token file: %w", err)
 	}
 
@@ -138,17 +125,13 @@ func saveTokenToFile(token string, expiresIn time.Duration) error {
 
 // readTokenFromFile attempts to read the token from the file
 func readTokenFromFile() (string, error) {
-	data, err := os.ReadFile(tokenFilePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
+	var tokenData TokenData
+	if err := ReadJSONFile(tokenFilePath, &tokenData); err != nil {
 		return "", fmt.Errorf("failed to read token file: %w", err)
 	}
 
-	var tokenData TokenData
-	if err := json.Unmarshal(data, &tokenData); err != nil {
-		return "", fmt.Errorf("failed to unmarshal token data: %w", err)
+	if tokenData.AccessToken == "" {
+		return "", nil // No token data found
 	}
 
 	// Check if token is expired or about to expire
@@ -192,11 +175,13 @@ func getRedditAccessToken() (string, error) {
 
 	log.Printf("INFO: Requesting new Reddit access token")
 
-	clientID := os.Getenv("REDDIT_CLIENT_ID")
-	clientSecret := os.Getenv("REDDIT_CLIENT_SECRET")
-
-	if clientID == "" || clientSecret == "" {
-		return "", ErrMissingEnvVar("REDDIT_CLIENT_ID or REDDIT_CLIENT_SECRET")
+	clientID, err := GetRequiredEnvVar("REDDIT_CLIENT_ID")
+	if err != nil {
+		return "", err
+	}
+	clientSecret, err := GetRequiredEnvVar("REDDIT_CLIENT_SECRET")
+	if err != nil {
+		return "", err
 	}
 
 	data := strings.NewReader("grant_type=client_credentials")
