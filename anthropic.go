@@ -17,24 +17,8 @@ import (
 )
 
 const (
-	// API related constants
-	anthropicAPIEndpoint = "https://api.anthropic.com/v1/messages"
-	anthropicAPIVersion  = "2023-06-01"
-
 	// Environment variable names
 	envAnthropicAPIKey = "ANTHROPIC_API_KEY"
-
-	// Request parameters
-	defaultMaxTokens   = 1500
-	defaultTemperature = 0.7
-	requestTimeout     = 45 * time.Second
-
-	// Output formatting
-	summaryHeader = "📱 *REDDIT PULSE* 📱\n\n"
-
-	// Rate limiting
-	anthropicRequestsPerMinute = 10
-	anthropicBurstSize         = 3
 )
 
 // promptTemplate defines the template for the summarization request
@@ -64,8 +48,13 @@ Posts to analyze:
 
 var (
 	// Rate limiter for Anthropic API
-	anthropicLimiter = rate.NewLimiter(rate.Every(time.Minute/time.Duration(anthropicRequestsPerMinute)), anthropicBurstSize)
+	anthropicLimiter *rate.Limiter
 )
+
+func InitializeAnthropicRateLimiter() {
+	// Initialize the rate limiter from config
+	anthropicLimiter = rate.NewLimiter(rate.Every(time.Minute/time.Duration(AppConfig.AnthropicRequestsPerMinute)), AppConfig.AnthropicBurstSize)
+}
 
 // Message represents a single message in the conversation with Claude
 type Message struct {
@@ -105,7 +94,7 @@ func summarizePosts(text string, model string) (string, error) {
 	request := createAnthropicRequest(model, text)
 
 	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), AppConfig.AnthropicRequestTimeout)
 	defer cancel()
 
 	// Make the API call
@@ -145,8 +134,8 @@ func createAnthropicRequest(model, text string) AnthropicRequest {
 				Content: prompt,
 			},
 		},
-		MaxTokens:   defaultMaxTokens,
-		Temperature: defaultTemperature,
+		MaxTokens:   AppConfig.AnthropicMaxTokens,
+		Temperature: AppConfig.AnthropicTemperature,
 	}
 }
 
@@ -164,7 +153,7 @@ func makeAnthropicAPICall(ctx context.Context, request AnthropicRequest, apiKey 
 	}
 
 	// Create the HTTP request
-	req, err := http.NewRequestWithContext(ctx, "POST", anthropicAPIEndpoint, bytes.NewBuffer(requestBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", AppConfig.AnthropicAPIEndpoint, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
@@ -172,11 +161,11 @@ func makeAnthropicAPICall(ctx context.Context, request AnthropicRequest, apiKey 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", apiKey)
-	req.Header.Set("anthropic-version", anthropicAPIVersion)
+	req.Header.Set("anthropic-version", AppConfig.AnthropicAPIVersion)
 
 	// Create HTTP client with timeout
 	client := &http.Client{
-		Timeout: requestTimeout,
+		Timeout: AppConfig.AnthropicRequestTimeout,
 	}
 
 	// Send the request
@@ -238,5 +227,5 @@ func formatResponse(response *AnthropicResponse) (string, error) {
 	}
 
 	// Format the response with a header
-	return summaryHeader + text, nil
+	return AppConfig.SummaryHeader + text, nil
 }

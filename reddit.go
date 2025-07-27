@@ -14,24 +14,7 @@ import (
 )
 
 // Constants for rate limiting and API endpoints
-const (
-	// API URLs
-	redditBaseURL = "https://oauth.reddit.com"
-	redditAuthURL = "https://www.reddit.com/api/v1/access_token"
-
-	// Default parameters
-	defaultPostLimit    = 7
-	defaultCommentLimit = 7
-	defaultTimeFrame    = "day"
-
-	// Rate limiting
-	requestsPerSecond = 1
-	burstSize         = 5
-
-	// Token caching
-	tokenExpiryBuffer = 5 * time.Minute
-	tokenFilePath     = "data/reddit_token.json"
-)
+const ()
 
 var (
 	// Token caching
@@ -40,11 +23,13 @@ var (
 	tokenExpiration time.Time
 
 	// Rate limiter
-	redditLimiter = rate.NewLimiter(rate.Limit(requestsPerSecond), burstSize)
-
-	// User agent for Reddit API requests
-	redditUserAgent = getEnvOrDefault("REDDIT_USER_AGENT", "SubTrends/1.0")
+	redditLimiter *rate.Limiter
 )
+
+func InitializeRedditRateLimiter() {
+	// Initialize the rate limiter from config
+	redditLimiter = rate.NewLimiter(rate.Limit(AppConfig.RedditRequestsPerSecond), AppConfig.RedditBurstSize)
+}
 
 // TokenData represents the structure of the token file
 type TokenData struct {
@@ -86,7 +71,7 @@ func makeRequest(req *http.Request) (*http.Response, error) {
 
 	// Set a timeout for the request
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: AppConfig.RedditRequestTimeout,
 	}
 
 	log.Printf("INFO: Sending request: %s %s", req.Method, req.URL.String())
@@ -115,7 +100,7 @@ func saveTokenToFile(token string, expiresIn time.Duration) error {
 		ExpiresAt:   time.Now().Add(time.Second * expiresIn),
 	}
 
-	if err := WriteJSONFile(tokenFilePath, tokenData); err != nil {
+	if err := WriteJSONFile(AppConfig.RedditTokenFilePath, tokenData); err != nil {
 		return fmt.Errorf("failed to write token file: %w", err)
 	}
 
@@ -126,7 +111,7 @@ func saveTokenToFile(token string, expiresIn time.Duration) error {
 // readTokenFromFile attempts to read the token from the file
 func readTokenFromFile() (string, error) {
 	var tokenData TokenData
-	if err := ReadJSONFile(tokenFilePath, &tokenData); err != nil {
+	if err := ReadJSONFile(AppConfig.RedditTokenFilePath, &tokenData); err != nil {
 		return "", fmt.Errorf("failed to read token file: %w", err)
 	}
 
@@ -135,7 +120,7 @@ func readTokenFromFile() (string, error) {
 	}
 
 	// Check if token is expired or about to expire
-	if time.Now().Add(tokenExpiryBuffer).After(tokenData.ExpiresAt) {
+	if time.Now().Add(AppConfig.RedditTokenExpiryBuffer).After(tokenData.ExpiresAt) {
 		return "", nil
 	}
 
@@ -155,7 +140,7 @@ func getRedditAccessToken() (string, error) {
 
 	// Check if cached token is still valid (with buffer time)
 	tokenMutex.RLock()
-	if time.Now().Add(tokenExpiryBuffer).Before(tokenExpiration) && cachedToken != "" {
+	if time.Now().Add(AppConfig.RedditTokenExpiryBuffer).Before(tokenExpiration) && cachedToken != "" {
 		token := cachedToken
 		tokenMutex.RUnlock()
 		log.Printf("INFO: Using cached Reddit access token, expires in %v", time.Until(tokenExpiration))
@@ -163,12 +148,8 @@ func getRedditAccessToken() (string, error) {
 	}
 	tokenMutex.RUnlock()
 
-	// Need to get a new token
-	tokenMutex.Lock()
-	defer tokenMutex.Unlock()
-
 	// Double-check after acquiring write lock
-	if time.Now().Add(tokenExpiryBuffer).Before(tokenExpiration) && cachedToken != "" {
+	if time.Now().Add(AppConfig.RedditTokenExpiryBuffer).Before(tokenExpiration) && cachedToken != "" {
 		log.Printf("INFO: Using cached Reddit access token, expires in %v", time.Until(tokenExpiration))
 		return cachedToken, nil
 	}
@@ -185,13 +166,13 @@ func getRedditAccessToken() (string, error) {
 	}
 
 	data := strings.NewReader("grant_type=client_credentials")
-	req, err := http.NewRequest("POST", redditAuthURL, data)
+	req, err := http.NewRequest("POST", AppConfig.RedditAuthURL, data)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.SetBasicAuth(clientID, clientSecret)
-	req.Header.Set("User-Agent", redditUserAgent)
+	req.Header.Set("User-Agent", AppConfig.RedditUserAgent)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := makeRequest(req)
@@ -231,16 +212,16 @@ func fetchTopPosts(subreddit, token string) ([]RedditPost, error) {
 	// Clean subreddit name (remove r/ prefix if present)
 	subreddit = strings.TrimPrefix(subreddit, "r/")
 
-	log.Printf("INFO: Fetching top %d posts from r/%s for time frame: %s", defaultPostLimit, subreddit, defaultTimeFrame)
+	log.Printf("INFO: Fetching top %d posts from r/%s for time frame: %s", AppConfig.RedditPostLimit, subreddit, AppConfig.RedditTimeFrame)
 
-	url := fmt.Sprintf("%s/r/%s/top?t=%s&limit=%d", redditBaseURL, subreddit, defaultTimeFrame, defaultPostLimit)
+	url := fmt.Sprintf("%s/r/%s/top?t=%s&limit=%d", AppConfig.RedditBaseURL, subreddit, AppConfig.RedditTimeFrame, AppConfig.RedditPostLimit)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", redditUserAgent)
+	req.Header.Set("User-Agent", AppConfig.RedditUserAgent)
 
 	resp, err := makeRequest(req)
 	if err != nil {
@@ -280,16 +261,16 @@ func fetchTopComments(permalink, token string) ([]string, error) {
 	// Remove trailing slash if present
 	permalink = strings.TrimSuffix(permalink, "/")
 
-	log.Printf("INFO: Fetching top %d comments for post: %s", defaultCommentLimit, permalink)
+	log.Printf("INFO: Fetching top %d comments for post: %s", AppConfig.RedditCommentLimit, permalink)
 
-	url := fmt.Sprintf("%s%s.json?limit=%d", redditBaseURL, permalink, defaultCommentLimit)
+	url := fmt.Sprintf("%s%s.json?limit=%d", AppConfig.RedditBaseURL, permalink, AppConfig.RedditCommentLimit)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("User-Agent", redditUserAgent)
+	req.Header.Set("User-Agent", AppConfig.RedditUserAgent)
 
 	resp, err := makeRequest(req)
 	if err != nil {
@@ -361,12 +342,12 @@ func subredditData(subreddit, token string) (string, error) {
 
 	// Process each post with a limit on concurrent requests
 	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, 3) // Limit concurrent requests
+	semaphore := make(chan struct{}, AppConfig.RedditConcurrentRequests) // Limit concurrent requests
 	commentsMutex := sync.Mutex{}
 	postsWithComments := make(map[int][]string)
 	errChan := make(chan error, len(posts))
 
-	log.Printf("INFO: Fetching comments for %d posts with max concurrency of 3", len(posts))
+	log.Printf("INFO: Fetching comments for %d posts with max concurrency of %d", len(posts), AppConfig.RedditConcurrentRequests)
 
 	for i, post := range posts {
 		wg.Add(1)
@@ -417,7 +398,7 @@ func subredditData(subreddit, token string) (string, error) {
 		if ok && len(comments) > 0 {
 			builder.WriteString("Top Comments:\n")
 			for j, comment := range comments {
-				if j >= defaultCommentLimit {
+				if j >= AppConfig.RedditCommentLimit {
 					break
 				}
 

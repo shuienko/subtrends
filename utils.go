@@ -25,15 +25,6 @@ func ErrMissingEnvVar(varName string) error {
 	return EnvVarError{VarName: varName}
 }
 
-// getEnvOrDefault returns the value of an environment variable or a default value if not set
-func getEnvOrDefault(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	return value
-}
-
 // GetRequiredEnvVar returns the value of a required environment variable or an error if not set.
 func GetRequiredEnvVar(key string) (string, error) {
 	value := os.Getenv(key)

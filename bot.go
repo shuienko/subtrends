@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -204,7 +203,7 @@ func (bot *DiscordBot) getUserSession(userID string) *UserSession {
 	if !exists {
 		session = &UserSession{
 			UserID:    userID,
-			History:   make([]string, 0, 50),
+			History:   make([]string, 0, AppConfig.HistoryInitCapacity),
 			Model:     availableModels[0].Name, // Default to first model
 			CreatedAt: time.Now(),
 		}
@@ -233,18 +232,16 @@ func (bot *DiscordBot) saveSessions() {
 	}
 	bot.sessionMutex.RUnlock()
 
-	sessionFile := filepath.Join("data", "sessions.json")
-	if err := WriteJSONFile(sessionFile, sessions); err != nil {
+	if err := WriteJSONFile(AppConfig.SessionFilePath, sessions); err != nil {
 		log.Printf("Error writing sessions file: %v", err)
 	}
 }
 
 // loadSessions loads sessions from data/sessions.json
 func (bot *DiscordBot) loadSessions() {
-	sessionFile := filepath.Join("data", "sessions.json")
 	var sessions map[string]*UserSession
 
-	if err := ReadJSONFile(sessionFile, &sessions); err != nil {
+	if err := ReadJSONFile(AppConfig.SessionFilePath, &sessions); err != nil {
 		log.Printf("Error reading or parsing sessions file: %v", err)
 		return
 	}
@@ -272,8 +269,8 @@ func (bot *DiscordBot) messageCreate(s *discordgo.Session, m *discordgo.MessageC
 	}
 
 	// Handle simple text commands for backward compatibility
-	if strings.HasPrefix(m.Content, "!trend ") {
-		subreddit := strings.TrimSpace(strings.TrimPrefix(m.Content, "!trend "))
+	if strings.HasPrefix(m.Content, AppConfig.LegacyCommandPrefix) {
+		subreddit := strings.TrimSpace(strings.TrimPrefix(m.Content, AppConfig.LegacyCommandPrefix))
 		if subreddit != "" {
 			bot.handleTrendCommand(s, m.ChannelID, m.Author.ID, subreddit)
 		}
@@ -402,7 +399,7 @@ func (bot *DiscordBot) formatAnalysisResponse(subreddit, summary string, posts [
 	if len(posts) > 0 {
 		builder.WriteString("### 🔗 **Top Posts**\n")
 		for _, post := range posts {
-			builder.WriteString(fmt.Sprintf("• [%s](<https://reddit.com%s>)\n", post.Title, post.Permalink))
+			builder.WriteString(fmt.Sprintf("• [%s](<%s%s>)\n", post.Title, AppConfig.RedditPublicURL, post.Permalink))
 		}
 	}
 
@@ -467,16 +464,16 @@ func (bot *DiscordBot) handleHistorySlashCommand(s *discordgo.Session, i *discor
 
 		// Show recent history (last 25)
 		start := 0
-		if len(session.History) > 25 {
-			start = len(session.History) - 25
+		if len(session.History) > AppConfig.HistoryDisplayLimit {
+			start = len(session.History) - AppConfig.HistoryDisplayLimit
 		}
 
 		for i := start; i < len(session.History); i++ {
 			builder.WriteString(fmt.Sprintf("• r/%s\n", session.History[i]))
 		}
 
-		if len(session.History) > 25 {
-			builder.WriteString(fmt.Sprintf("\n*Showing last 25 of %d total analyses*", len(session.History)))
+		if len(session.History) > AppConfig.HistoryDisplayLimit {
+			builder.WriteString(fmt.Sprintf("\n*Showing last %d of %d total analyses*", AppConfig.HistoryDisplayLimit, len(session.History)))
 		}
 
 		response = builder.String()
@@ -498,7 +495,7 @@ func (bot *DiscordBot) handleClearSlashCommand(s *discordgo.Session, i *discordg
 	userID := i.Member.User.ID
 	session := bot.getUserSession(userID)
 
-	session.History = make([]string, 0, 50)
+	session.History = make([]string, 0, AppConfig.HistoryInitCapacity)
 	bot.saveUserSession(userID, session)
 
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -522,7 +519,7 @@ func (bot *DiscordBot) sendMessage(s *discordgo.Session, channelID, content stri
 
 // sendLongMessage splits long messages into chunks under Discord's 2000 character limit
 func (bot *DiscordBot) sendLongMessage(s *discordgo.Session, channelID, content string) {
-	const maxLength = 1900 // Leave some buffer under 2000 limit
+	maxLength := AppConfig.DiscordMessageSplitLength // Leave some buffer under 2000 limit
 
 	if len(content) <= maxLength {
 		bot.sendMessage(s, channelID, content)

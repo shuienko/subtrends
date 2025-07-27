@@ -6,11 +6,15 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 )
 
 func main() {
 	log.Println("Starting SubTrends Discord Bot...")
+
+	// Load configuration from environment variables
+	LoadConfig()
+	InitializeAnthropicRateLimiter()
+	InitializeRedditRateLimiter()
 
 	// Create Discord bot instance
 	bot, err := NewDiscordBot()
@@ -41,7 +45,7 @@ func main() {
 	log.Println("Shutdown signal received, stopping bot...")
 
 	// Create a context with timeout for graceful shutdown
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), AppConfig.ShutdownTimeout)
 	defer shutdownCancel()
 
 	// Stop the bot
