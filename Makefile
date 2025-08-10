@@ -1,6 +1,11 @@
 # SubTrends Makefile — local development, testing, and Docker helpers
 
+# Use zsh locally if available; fall back to bash (e.g., on GitHub Actions Ubuntu runners)
+ifneq ($(wildcard /bin/zsh),)
 SHELL := /bin/zsh
+else
+SHELL := /bin/bash
+endif
 
 # Load environment variables from .env if present (non-fatal if missing)
 -include .env
