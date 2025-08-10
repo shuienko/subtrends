@@ -13,7 +13,7 @@ func main() {
 
 	// Load configuration from environment variables
 	LoadConfig()
-	InitializeAnthropicRateLimiter()
+	InitializeOpenAIRateLimiter()
 	InitializeRedditRateLimiter()
 
 	// Create Discord bot instance

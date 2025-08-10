@@ -9,16 +9,13 @@ import (
 // Config stores all configuration for the application.
 // Values are read from environment variables.
 type Config struct {
-	// Anthropic API settings
-	AnthropicAPIEndpoint       string
-	AnthropicAPIVersion        string
-	AnthropicMaxTokens         int
-	AnthropicTemperature       float64
-	AnthropicRequestTimeout    time.Duration
-	AnthropicRequestsPerMinute int
-	AnthropicBurstSize         int
-	SummaryHeader              string
-	AnthropicAPIKey            string
+	// OpenAI API settings
+	OpenAIAPIEndpoint       string
+	OpenAIRequestTimeout    time.Duration
+	OpenAIRequestsPerMinute int
+	OpenAIBurstSize         int
+	SummaryHeader           string
+	OpenAIAPIKey            string
 
 	// Reddit API settings
 	RedditBaseURL            string
@@ -54,16 +51,13 @@ var AppConfig *Config
 // LoadConfig loads configuration from environment variables and populates AppConfig.
 func LoadConfig() {
 	AppConfig = &Config{
-		// Anthropic
-		AnthropicAPIEndpoint:       getEnv("ANTHROPIC_API_ENDPOINT", "https://api.anthropic.com/v1/messages"),
-		AnthropicAPIVersion:        getEnv("ANTHROPIC_API_VERSION", "2023-06-01"),
-		AnthropicMaxTokens:         getEnvAsInt("ANTHROPIC_MAX_TOKENS", 1500),
-		AnthropicTemperature:       getEnvAsFloat64("ANTHROPIC_TEMPERATURE", 0.7),
-		AnthropicRequestTimeout:    getEnvAsDuration("ANTHROPIC_REQUEST_TIMEOUT", 45*time.Second),
-		AnthropicRequestsPerMinute: getEnvAsInt("ANTHROPIC_REQUESTS_PER_MINUTE", 10),
-		AnthropicBurstSize:         getEnvAsInt("ANTHROPIC_BURST_SIZE", 3),
-		SummaryHeader:              getEnv("SUMMARY_HEADER", "📱 *REDDIT PULSE* 📱\n\n"),
-		AnthropicAPIKey:            getEnv("ANTHROPIC_API_KEY", ""),
+		// OpenAI
+		OpenAIAPIEndpoint:       getEnv("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
+		OpenAIRequestTimeout:    getEnvAsDuration("OPENAI_REQUEST_TIMEOUT", 45*time.Second),
+		OpenAIRequestsPerMinute: getEnvAsInt("OPENAI_REQUESTS_PER_MINUTE", 10),
+		OpenAIBurstSize:         getEnvAsInt("OPENAI_BURST_SIZE", 3),
+		SummaryHeader:           getEnv("SUMMARY_HEADER", "📱 *REDDIT PULSE* 📱\n\n"),
+		OpenAIAPIKey:            getEnv("OPENAI_API_KEY", ""),
 
 		// Reddit
 		RedditBaseURL:            getEnv("REDDIT_BASE_URL", "https://oauth.reddit.com"),

@@ -27,23 +27,34 @@ type DiscordBot struct {
 	stopChan     chan struct{}
 }
 
-// Available models for selection
+// Available models for selection (OpenAI)
 var availableModels = []ModelInfo{
 	{
-		Codename:    "haiku3",
-		Name:        "claude-3-haiku-20240307",
+		Codename:    "gpt5mini",
+		Name:        "gpt-5-mini",
 		Description: "Fast and efficient model (default)",
 	},
 	{
-		Codename:    "haiku35",
-		Name:        "claude-3-5-haiku-latest",
-		Description: "Balanced performance and capabilities",
-	},
-	{
-		Codename:    "sonnet4",
-		Name:        "claude-sonnet-4-0",
+		Codename:    "gpt5",
+		Name:        "gpt-5",
 		Description: "Most capable model for complex tasks",
 	},
+}
+
+func getDefaultModelName() string {
+	return availableModels[0].Name
+}
+
+func isValidModelName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, m := range availableModels {
+		if name == m.Name {
+			return true
+		}
+	}
+	return false
 }
 
 // ModelInfo represents information about an available model
@@ -200,10 +211,17 @@ func (bot *DiscordBot) getUserSession(userID string) *UserSession {
 		session = &UserSession{
 			UserID:    userID,
 			History:   make([]string, 0, AppConfig.HistoryInitCapacity),
-			Model:     availableModels[0].Name, // Default to first model
+			Model:     getDefaultModelName(), // Default to gpt-5-mini
 			CreatedAt: time.Now(),
 		}
 		bot.userSessions[userID] = session
+	} else {
+		// Migrate invalid/legacy model names to default
+		if !isValidModelName(session.Model) {
+			session.Model = getDefaultModelName()
+			bot.userSessions[userID] = session
+			go bot.saveSessions()
+		}
 	}
 
 	return session
@@ -251,6 +269,10 @@ func (bot *DiscordBot) loadSessions() {
 	defer bot.sessionMutex.Unlock()
 
 	for userID, session := range sessions {
+		// Normalize legacy/invalid models
+		if !isValidModelName(session.Model) {
+			session.Model = getDefaultModelName()
+		}
 		bot.userSessions[userID] = session
 	}
 

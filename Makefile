@@ -79,8 +79,8 @@ init-env: ## Create a starter .env from README example (if missing)
 	  "REDDIT_CLIENT_ID=" \
 	  "REDDIT_CLIENT_SECRET=" \
 	  "" \
-	  "# Get this from your Anthropic account dashboard" \
-	  "ANTHROPIC_API_KEY=" \
+	  "# Get this from your OpenAI account dashboard" \
+	  "OPENAI_API_KEY=" \
 	  "" \
 	  "# --- Optional Settings ---" \
 	  "# You can override the default values from config.go" \
