@@ -105,14 +105,6 @@ func getEnvAsInt(key string, fallback int) int {
 	return fallback
 }
 
-func getEnvAsFloat64(key string, fallback float64) float64 {
-	valueStr := getEnv(key, "")
-	if value, err := strconv.ParseFloat(valueStr, 64); err == nil {
-		return value
-	}
-	return fallback
-}
-
 func getEnvAsDuration(key string, fallback time.Duration) time.Duration {
 	valueStr := getEnv(key, "")
 	if value, err := time.ParseDuration(valueStr); err == nil {

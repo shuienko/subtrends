@@ -159,10 +159,11 @@ func (bot *DiscordBot) registerCommands() error {
 			Description: "Analyze trends in a subreddit",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "subreddit",
-					Description: "The subreddit to analyze (without r/)",
-					Required:    true,
+					Type:         discordgo.ApplicationCommandOptionString,
+					Name:         "subreddit",
+					Description:  "The subreddit to analyze (without r/)",
+					Required:     true,
+					Autocomplete: true,
 				},
 			},
 		},
@@ -297,14 +298,24 @@ func (bot *DiscordBot) messageCreate(s *discordgo.Session, m *discordgo.MessageC
 
 // interactionCreate handler for slash commands
 func (bot *DiscordBot) interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if i.ApplicationCommandData().Name == "trend" {
-		bot.handleTrendSlashCommand(s, i)
-	} else if i.ApplicationCommandData().Name == "model" {
-		bot.handleModelSlashCommand(s, i)
-	} else if i.ApplicationCommandData().Name == "history" {
-		bot.handleHistorySlashCommand(s, i)
-	} else if i.ApplicationCommandData().Name == "clear" {
-		bot.handleClearSlashCommand(s, i)
+	// Handle autocomplete interactions separately
+	switch i.Type {
+	case discordgo.InteractionApplicationCommandAutocomplete:
+		if i.ApplicationCommandData().Name == "trend" {
+			bot.handleTrendAutocomplete(s, i)
+		}
+		return
+	case discordgo.InteractionApplicationCommand:
+		// Regular slash command invocations
+		if i.ApplicationCommandData().Name == "trend" {
+			bot.handleTrendSlashCommand(s, i)
+		} else if i.ApplicationCommandData().Name == "model" {
+			bot.handleModelSlashCommand(s, i)
+		} else if i.ApplicationCommandData().Name == "history" {
+			bot.handleHistorySlashCommand(s, i)
+		} else if i.ApplicationCommandData().Name == "clear" {
+			bot.handleClearSlashCommand(s, i)
+		}
 	}
 }
 
@@ -333,6 +344,73 @@ func (bot *DiscordBot) handleTrendSlashCommand(s *discordgo.Session, i *discordg
 
 	// Handle the analysis in a goroutine
 	go bot.handleTrendAnalysis(s, i.ChannelID, userID, subreddit)
+}
+
+// handleTrendAutocomplete provides history-based suggestions for the subreddit option
+func (bot *DiscordBot) handleTrendAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// Determine user ID (DM vs Guild)
+	var userID string
+	if i.Member != nil && i.Member.User != nil {
+		userID = i.Member.User.ID
+	} else if i.User != nil {
+		userID = i.User.ID
+	}
+
+	// Current typed value for the focused option
+	var typed string
+	for _, opt := range i.ApplicationCommandData().Options {
+		if opt.Focused {
+			typed = strings.TrimSpace(opt.StringValue())
+			break
+		}
+	}
+
+	session := bot.getUserSession(userID)
+
+	// Build suggestions from history
+	const maxSuggestions = 25
+	choices := make([]*discordgo.ApplicationCommandOptionChoice, 0, maxSuggestions)
+
+	// If nothing typed, prioritize most recent history (from end)
+	if typed == "" {
+		start := 0
+		if len(session.History) > maxSuggestions {
+			start = len(session.History) - maxSuggestions
+		}
+		for i := len(session.History) - 1; i >= start; i-- {
+			sub := session.History[i]
+			choices = append(choices, &discordgo.ApplicationCommandOptionChoice{Name: sub, Value: sub})
+			if len(choices) >= maxSuggestions {
+				break
+			}
+		}
+	} else {
+		lowerTyped := strings.ToLower(typed)
+		// De-duplicate while preserving order from most recent
+		seen := make(map[string]struct{})
+		for i := len(session.History) - 1; i >= 0; i-- {
+			sub := session.History[i]
+			key := strings.ToLower(sub)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			if strings.Contains(key, lowerTyped) {
+				choices = append(choices, &discordgo.ApplicationCommandOptionChoice{Name: sub, Value: sub})
+				seen[key] = struct{}{}
+				if len(choices) >= maxSuggestions {
+					break
+				}
+			}
+		}
+	}
+
+	// Respond with autocomplete choices
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+		Data: &discordgo.InteractionResponseData{
+			Choices: choices,
+		},
+	})
 }
 
 // handleTrendCommand handles the trend command (both slash and text)

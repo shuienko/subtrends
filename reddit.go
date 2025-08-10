@@ -158,7 +158,7 @@ func getRedditAccessToken() (string, error) {
 	log.Printf("INFO: Requesting new Reddit access token")
 
 	if AppConfig.RedditClientID == "" || AppConfig.RedditClientSecret == "" {
-		return "", fmt.Errorf("Reddit client ID or secret is not configured")
+		return "", fmt.Errorf("reddit client ID or secret is not configured")
 	}
 
 	data := strings.NewReader("grant_type=client_credentials")
