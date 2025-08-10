@@ -27,23 +27,34 @@ type DiscordBot struct {
 	stopChan     chan struct{}
 }
 
-// Available models for selection
+// Available models for selection (OpenAI)
 var availableModels = []ModelInfo{
 	{
-		Codename:    "haiku3",
-		Name:        "claude-3-haiku-20240307",
+		Codename:    "gpt5mini",
+		Name:        "gpt-5-mini",
 		Description: "Fast and efficient model (default)",
 	},
 	{
-		Codename:    "haiku35",
-		Name:        "claude-3-5-haiku-latest",
-		Description: "Balanced performance and capabilities",
-	},
-	{
-		Codename:    "sonnet4",
-		Name:        "claude-sonnet-4-0",
+		Codename:    "gpt5",
+		Name:        "gpt-5",
 		Description: "Most capable model for complex tasks",
 	},
+}
+
+func getDefaultModelName() string {
+	return availableModels[0].Name
+}
+
+func isValidModelName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, m := range availableModels {
+		if name == m.Name {
+			return true
+		}
+	}
+	return false
 }
 
 // ModelInfo represents information about an available model
@@ -148,10 +159,11 @@ func (bot *DiscordBot) registerCommands() error {
 			Description: "Analyze trends in a subreddit",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "subreddit",
-					Description: "The subreddit to analyze (without r/)",
-					Required:    true,
+					Type:         discordgo.ApplicationCommandOptionString,
+					Name:         "subreddit",
+					Description:  "The subreddit to analyze (without r/)",
+					Required:     true,
+					Autocomplete: true,
 				},
 			},
 		},
@@ -178,14 +190,15 @@ func (bot *DiscordBot) registerCommands() error {
 		},
 	}
 
-	log.Println("Registering slash commands...")
-	for _, cmd := range commands {
-		_, err := bot.session.ApplicationCommandCreate(bot.session.State.User.ID, "", cmd)
-		if err != nil {
-			return fmt.Errorf("cannot create '%v' command: %w", cmd.Name, err)
-		}
+	log.Println("Upserting slash commands via bulk overwrite...")
+
+	// Use global bulk overwrite to create/update commands atomically
+	_, err := bot.session.ApplicationCommandBulkOverwrite(bot.session.State.User.ID, "", commands)
+	if err != nil {
+		return fmt.Errorf("failed to bulk overwrite application commands: %w", err)
 	}
-	log.Println("Slash commands registered successfully")
+
+	log.Println("Slash commands upserted successfully")
 
 	return nil
 }
@@ -200,10 +213,17 @@ func (bot *DiscordBot) getUserSession(userID string) *UserSession {
 		session = &UserSession{
 			UserID:    userID,
 			History:   make([]string, 0, AppConfig.HistoryInitCapacity),
-			Model:     availableModels[0].Name, // Default to first model
+			Model:     getDefaultModelName(), // Default to gpt-5-mini
 			CreatedAt: time.Now(),
 		}
 		bot.userSessions[userID] = session
+	} else {
+		// Migrate invalid/legacy model names to default
+		if !isValidModelName(session.Model) {
+			session.Model = getDefaultModelName()
+			bot.userSessions[userID] = session
+			go bot.saveSessions()
+		}
 	}
 
 	return session
@@ -251,6 +271,10 @@ func (bot *DiscordBot) loadSessions() {
 	defer bot.sessionMutex.Unlock()
 
 	for userID, session := range sessions {
+		// Normalize legacy/invalid models
+		if !isValidModelName(session.Model) {
+			session.Model = getDefaultModelName()
+		}
 		bot.userSessions[userID] = session
 	}
 
@@ -275,14 +299,24 @@ func (bot *DiscordBot) messageCreate(s *discordgo.Session, m *discordgo.MessageC
 
 // interactionCreate handler for slash commands
 func (bot *DiscordBot) interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if i.ApplicationCommandData().Name == "trend" {
-		bot.handleTrendSlashCommand(s, i)
-	} else if i.ApplicationCommandData().Name == "model" {
-		bot.handleModelSlashCommand(s, i)
-	} else if i.ApplicationCommandData().Name == "history" {
-		bot.handleHistorySlashCommand(s, i)
-	} else if i.ApplicationCommandData().Name == "clear" {
-		bot.handleClearSlashCommand(s, i)
+	// Handle autocomplete interactions separately
+	switch i.Type {
+	case discordgo.InteractionApplicationCommandAutocomplete:
+		if i.ApplicationCommandData().Name == "trend" {
+			bot.handleTrendAutocomplete(s, i)
+		}
+		return
+	case discordgo.InteractionApplicationCommand:
+		// Regular slash command invocations
+		if i.ApplicationCommandData().Name == "trend" {
+			bot.handleTrendSlashCommand(s, i)
+		} else if i.ApplicationCommandData().Name == "model" {
+			bot.handleModelSlashCommand(s, i)
+		} else if i.ApplicationCommandData().Name == "history" {
+			bot.handleHistorySlashCommand(s, i)
+		} else if i.ApplicationCommandData().Name == "clear" {
+			bot.handleClearSlashCommand(s, i)
+		}
 	}
 }
 
@@ -311,6 +345,73 @@ func (bot *DiscordBot) handleTrendSlashCommand(s *discordgo.Session, i *discordg
 
 	// Handle the analysis in a goroutine
 	go bot.handleTrendAnalysis(s, i.ChannelID, userID, subreddit)
+}
+
+// handleTrendAutocomplete provides history-based suggestions for the subreddit option
+func (bot *DiscordBot) handleTrendAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// Determine user ID (DM vs Guild)
+	var userID string
+	if i.Member != nil && i.Member.User != nil {
+		userID = i.Member.User.ID
+	} else if i.User != nil {
+		userID = i.User.ID
+	}
+
+	// Current typed value for the focused option
+	var typed string
+	for _, opt := range i.ApplicationCommandData().Options {
+		if opt.Focused {
+			typed = strings.TrimSpace(opt.StringValue())
+			break
+		}
+	}
+
+	session := bot.getUserSession(userID)
+
+	// Build suggestions from history
+	const maxSuggestions = 25
+	choices := make([]*discordgo.ApplicationCommandOptionChoice, 0, maxSuggestions)
+
+	// If nothing typed, prioritize most recent history (from end)
+	if typed == "" {
+		start := 0
+		if len(session.History) > maxSuggestions {
+			start = len(session.History) - maxSuggestions
+		}
+		for i := len(session.History) - 1; i >= start; i-- {
+			sub := session.History[i]
+			choices = append(choices, &discordgo.ApplicationCommandOptionChoice{Name: sub, Value: sub})
+			if len(choices) >= maxSuggestions {
+				break
+			}
+		}
+	} else {
+		lowerTyped := strings.ToLower(typed)
+		// De-duplicate while preserving order from most recent
+		seen := make(map[string]struct{})
+		for i := len(session.History) - 1; i >= 0; i-- {
+			sub := session.History[i]
+			key := strings.ToLower(sub)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			if strings.Contains(key, lowerTyped) {
+				choices = append(choices, &discordgo.ApplicationCommandOptionChoice{Name: sub, Value: sub})
+				seen[key] = struct{}{}
+				if len(choices) >= maxSuggestions {
+					break
+				}
+			}
+		}
+	}
+
+	// Respond with autocomplete choices
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionApplicationCommandAutocompleteResult,
+		Data: &discordgo.InteractionResponseData{
+			Choices: choices,
+		},
+	})
 }
 
 // handleTrendCommand handles the trend command (both slash and text)
@@ -357,7 +458,7 @@ func (bot *DiscordBot) handleTrendAnalysis(s *discordgo.Session, channelID, user
 		return
 	}
 
-	data, posts, err := subredditData(subreddit, token)
+	data, posts, totalComments, err := subredditData(subreddit, token)
 	if err != nil {
 		log.Printf("Failed to get subreddit data: %v", err)
 		bot.sendMessage(s, channelID, fmt.Sprintf("❌ Failed to analyze r/%s: %v", subreddit, err))
@@ -373,15 +474,17 @@ func (bot *DiscordBot) handleTrendAnalysis(s *discordgo.Session, channelID, user
 	}
 
 	// Format and send response
-	response := bot.formatAnalysisResponse(subreddit, summary, posts)
+	response := bot.formatAnalysisResponse(subreddit, summary, posts, totalComments)
 	bot.sendLongMessage(s, channelID, response)
 }
 
 // formatAnalysisResponse formats the analysis response for Discord
-func (bot *DiscordBot) formatAnalysisResponse(subreddit, summary string, posts []RedditPost) string {
+func (bot *DiscordBot) formatAnalysisResponse(subreddit, summary string, posts []RedditPost, totalComments int) string {
 	var builder strings.Builder
 
 	builder.WriteString(fmt.Sprintf("## 📈 **r/%s Trends**\n\n", subreddit))
+	// Key stats line
+	builder.WriteString(fmt.Sprintf("**Key stats**: %d posts analyzed • timeframe: %s • %d comments\n\n", len(posts), AppConfig.RedditTimeFrame, totalComments))
 	builder.WriteString(summary)
 	builder.WriteString("\n\n")
 

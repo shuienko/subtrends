@@ -158,7 +158,7 @@ func getRedditAccessToken() (string, error) {
 	log.Printf("INFO: Requesting new Reddit access token")
 
 	if AppConfig.RedditClientID == "" || AppConfig.RedditClientSecret == "" {
-		return "", fmt.Errorf("Reddit client ID or secret is not configured")
+		return "", fmt.Errorf("reddit client ID or secret is not configured")
 	}
 
 	data := strings.NewReader("grant_type=client_credentials")
@@ -324,12 +324,12 @@ func fetchTopComments(permalink, token string) ([]string, error) {
 }
 
 // subredditData fetches data from a subreddit and formats it for summarization
-func subredditData(subreddit, token string) (string, []RedditPost, error) {
+func subredditData(subreddit, token string) (string, []RedditPost, int, error) {
 	log.Printf("INFO: Starting data collection for subreddit: r/%s", strings.TrimPrefix(subreddit, "r/"))
 
 	posts, err := fetchTopPosts(subreddit, token)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to fetch posts: %w", err)
+		return "", nil, 0, fmt.Errorf("failed to fetch posts: %w", err)
 	}
 
 	var builder strings.Builder
@@ -379,6 +379,12 @@ func subredditData(subreddit, token string) (string, []RedditPost, error) {
 
 	log.Printf("INFO: Formatting data for %d posts from r/%s", len(posts), cleanSubredditName)
 
+	// Compute total comments
+	totalComments := 0
+	for _, comments := range postsWithComments {
+		totalComments += len(comments)
+	}
+
 	// Format posts and comments
 	for i, post := range posts {
 		builder.WriteString(fmt.Sprintf("## Post %d: %s\n", i+1, post.Title))
@@ -411,5 +417,5 @@ func subredditData(subreddit, token string) (string, []RedditPost, error) {
 	}
 
 	log.Printf("INFO: Completed data collection for r/%s with %d posts", cleanSubredditName, len(posts))
-	return builder.String(), posts, nil
+	return builder.String(), posts, totalComments, nil
 }
