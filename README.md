@@ -105,7 +105,8 @@ Using Docker:
 
 ```bash
 docker build -t subtrends .
-docker run --env-file .env --name subtrends-bot -d subtrends
+# Mount local data/ into container for persistence across restarts
+docker run --env-file .env --name subtrends-bot -d -v $(pwd)/data:/app/data subtrends
 ```
 
 ## 🔩 Configuration
@@ -174,7 +175,7 @@ Choose with `/model`. Your selection is saved per-user.
 -   User sessions (history, chosen model): `data/sessions.json`
 -   Reddit OAuth token cache: `data/reddit_token.json`
 
-Both files are created automatically.
+Both files are created automatically. They are written with file mode 0600. When using Docker, they persist if you bind mount `data/`.
 
 ## 💻 Tech stack
 

@@ -61,9 +61,13 @@ clean: ## Clean build outputs and coverage
 docker-build: ## Build Docker image $(DOCKER_IMAGE)
 	docker build -t $(DOCKER_IMAGE) .
 
-docker-run: ## Run Docker container with env from $(ENV_FILE)
+docker-run: ensure-data-dir ## Run Docker container with env from $(ENV_FILE) and mount data volume
 	@if [ ! -f $(ENV_FILE) ]; then echo "$(ENV_FILE) not found. Create it or run 'make init-env' first."; exit 1; fi
-	docker run --rm -it --name $(CONTAINER_NAME) --env-file $(ENV_FILE) $(DOCKER_IMAGE)
+	docker run --rm -it \
+	  --name $(CONTAINER_NAME) \
+	  --env-file $(ENV_FILE) \
+	  -v $(PWD)/data:/app/data \
+	  $(DOCKER_IMAGE)
 
 docker-stop: ## Stop and remove running container
 	-@docker rm -f $(CONTAINER_NAME) >/dev/null 2>&1 || true

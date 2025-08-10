@@ -1,0 +1,22 @@
+# Docker ignore for SubTrends
+
+# Git and VCS
+.git
+.gitignore
+
+# Local artifacts
+bin/
+coverage.out
+coverage.html
+
+# Environment
+.env
+
+# Data (bind mount instead)
+data/
+
+# Editor/OS
+.DS_Store
+.vscode/
+.idea/
+

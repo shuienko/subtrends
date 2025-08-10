@@ -55,7 +55,8 @@ func ReadJSONFile(filePath string, target interface{}) error {
 func WriteJSONFile(filePath string, data interface{}) error {
 	// Ensure directory exists
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	// Restrict directory permissions since we store secrets in data/
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
@@ -65,9 +66,14 @@ func WriteJSONFile(filePath string, data interface{}) error {
 		return fmt.Errorf("failed to marshal data for %s: %w", filePath, err)
 	}
 
-	// Write file
-	if err := os.WriteFile(filePath, jsonData, 0644); err != nil {
+	// Write file with restrictive permissions
+	if err := os.WriteFile(filePath, jsonData, 0600); err != nil {
 		return fmt.Errorf("failed to write file %s: %w", filePath, err)
+	}
+
+	// Ensure permissions are set even if the file already existed
+	if err := os.Chmod(filePath, 0600); err != nil {
+		return fmt.Errorf("failed to set permissions on %s: %w", filePath, err)
 	}
 
 	return nil

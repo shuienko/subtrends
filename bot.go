@@ -190,14 +190,15 @@ func (bot *DiscordBot) registerCommands() error {
 		},
 	}
 
-	log.Println("Registering slash commands...")
-	for _, cmd := range commands {
-		_, err := bot.session.ApplicationCommandCreate(bot.session.State.User.ID, "", cmd)
-		if err != nil {
-			return fmt.Errorf("cannot create '%v' command: %w", cmd.Name, err)
-		}
+	log.Println("Upserting slash commands via bulk overwrite...")
+
+	// Use global bulk overwrite to create/update commands atomically
+	_, err := bot.session.ApplicationCommandBulkOverwrite(bot.session.State.User.ID, "", commands)
+	if err != nil {
+		return fmt.Errorf("failed to bulk overwrite application commands: %w", err)
 	}
-	log.Println("Slash commands registered successfully")
+
+	log.Println("Slash commands upserted successfully")
 
 	return nil
 }
