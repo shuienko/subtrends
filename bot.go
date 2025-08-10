@@ -458,7 +458,7 @@ func (bot *DiscordBot) handleTrendAnalysis(s *discordgo.Session, channelID, user
 		return
 	}
 
-	data, posts, err := subredditData(subreddit, token)
+	data, posts, totalComments, err := subredditData(subreddit, token)
 	if err != nil {
 		log.Printf("Failed to get subreddit data: %v", err)
 		bot.sendMessage(s, channelID, fmt.Sprintf("❌ Failed to analyze r/%s: %v", subreddit, err))
@@ -474,15 +474,17 @@ func (bot *DiscordBot) handleTrendAnalysis(s *discordgo.Session, channelID, user
 	}
 
 	// Format and send response
-	response := bot.formatAnalysisResponse(subreddit, summary, posts)
+	response := bot.formatAnalysisResponse(subreddit, summary, posts, totalComments)
 	bot.sendLongMessage(s, channelID, response)
 }
 
 // formatAnalysisResponse formats the analysis response for Discord
-func (bot *DiscordBot) formatAnalysisResponse(subreddit, summary string, posts []RedditPost) string {
+func (bot *DiscordBot) formatAnalysisResponse(subreddit, summary string, posts []RedditPost, totalComments int) string {
 	var builder strings.Builder
 
 	builder.WriteString(fmt.Sprintf("## 📈 **r/%s Trends**\n\n", subreddit))
+	// Key stats line
+	builder.WriteString(fmt.Sprintf("**Key stats**: %d posts analyzed • timeframe: %s • %d comments\n\n", len(posts), AppConfig.RedditTimeFrame, totalComments))
 	builder.WriteString(summary)
 	builder.WriteString("\n\n")
 
