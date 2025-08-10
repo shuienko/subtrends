@@ -70,24 +70,24 @@ docker-stop: ## Stop and remove running container
 
 init-env: ## Create a starter .env from README example (if missing)
 	@if [ -f .env ]; then echo ".env already exists"; exit 0; fi
-	@cat > .env <<-'EOF'
-	# .env file
-	# Get these from your Discord Developer Portal application
-	DISCORD_BOT_TOKEN=
-	
-	# Get these from your Reddit App preferences (https://www.reddit.com/prefs/apps)
-	REDDIT_CLIENT_ID=
-	REDDIT_CLIENT_SECRET=
-	
-	# Get this from your Anthropic account dashboard
-	ANTHROPIC_API_KEY=
-	
-	# --- Optional Settings ---
-	# You can override the default values from config.go
-	REDDIT_POST_LIMIT=7
-	REDDIT_COMMENT_LIMIT=7
-	REDDIT_TIMEFRAME=day
-	EOF
+	@printf "%s\n" \
+	  "# .env file" \
+	  "# Get these from your Discord Developer Portal application" \
+	  "DISCORD_BOT_TOKEN=" \
+	  "" \
+	  "# Get these from your Reddit App preferences (https://www.reddit.com/prefs/apps)" \
+	  "REDDIT_CLIENT_ID=" \
+	  "REDDIT_CLIENT_SECRET=" \
+	  "" \
+	  "# Get this from your Anthropic account dashboard" \
+	  "ANTHROPIC_API_KEY=" \
+	  "" \
+	  "# --- Optional Settings ---" \
+	  "# You can override the default values from config.go" \
+	  "REDDIT_POST_LIMIT=7" \
+	  "REDDIT_COMMENT_LIMIT=7" \
+	  "REDDIT_TIMEFRAME=day" \
+	  > .env
 	@echo "Wrote .env from template. Fill in required values before running."
 
 init: tidy build ## One-shot: tidy modules and build
