@@ -31,10 +31,11 @@ Format your response with:
 - 🔥 HOT TAKES: Highlight the most interesting or controversial opinions
 
 Rules:
-- Be conversational and engaging, like you're telling a friend about what's happening on Reddit
+- Be conversational and engaging
 - Use appropriate emojis to make the summary more visually appealing
+- Use 5-9 emojis total; max 1 per bullet; don't repeat the same emoji in a section
 - Don't reply with the summary for each post individually
-- Keep your tone friendly and slightly humorous where appropriate
+- Keep your tone friendly and humorous where appropriate
 - Organize information in a clear, scannable format with bullet points and sections
 
 Posts to analyze:
