@@ -53,7 +53,7 @@ func LoadConfig() {
 	AppConfig = &Config{
 		// OpenAI
 		OpenAIAPIEndpoint:       getEnv("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/chat/completions"),
-		OpenAIRequestTimeout:    getEnvAsDuration("OPENAI_REQUEST_TIMEOUT", 45*time.Second),
+		OpenAIRequestTimeout:    getEnvAsDuration("OPENAI_REQUEST_TIMEOUT", 120*time.Second),
 		OpenAIRequestsPerMinute: getEnvAsInt("OPENAI_REQUESTS_PER_MINUTE", 10),
 		OpenAIBurstSize:         getEnvAsInt("OPENAI_BURST_SIZE", 3),
 		SummaryHeader:           getEnv("SUMMARY_HEADER", "📱 *REDDIT PULSE* 📱\n\n"),
