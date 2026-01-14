@@ -42,6 +42,10 @@ Posts to analyze:
 
 %s`
 
+// defaultReasoningEffort is the default level used if a user
+// hasn't explicitly chosen a reasoning effort in the Discord UI.
+const defaultReasoningEffort = "minimal"
+
 var (
 	// Rate limiter for OpenAI API
 	openaiLimiter *rate.Limiter
@@ -78,7 +82,7 @@ type ChatCompletionResponse struct {
 }
 
 // summarizePosts takes a string of Reddit posts and returns a summarized version using the OpenAI API
-func summarizePosts(subreddit, text string, model string) (string, error) {
+func summarizePosts(subreddit, text string, model string, reasoningEffort string) (string, error) {
 	log.Printf("INFO: Making OpenAI API call with model: %s", model)
 
 	if AppConfig.OpenAIAPIKey == "" {
@@ -86,7 +90,7 @@ func summarizePosts(subreddit, text string, model string) (string, error) {
 	}
 
 	// Prepare the API request
-	request := createOpenAIRequest(model, text, subreddit)
+	request := createOpenAIRequest(model, text, subreddit, reasoningEffort)
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), AppConfig.OpenAIRequestTimeout)
@@ -103,14 +107,18 @@ func summarizePosts(subreddit, text string, model string) (string, error) {
 }
 
 // createOpenAIRequest creates a request structure for the OpenAI API
-func createOpenAIRequest(model, text, subredditName string) ChatCompletionRequest {
+func createOpenAIRequest(model, text, subredditName, reasoningEffort string) ChatCompletionRequest {
 	// Format the prompt with the Reddit data and subreddit name
 	prompt := fmt.Sprintf(promptTemplate, subredditName, text)
+
+	if reasoningEffort == "" {
+		reasoningEffort = defaultReasoningEffort
+	}
 
 	// Create the request structure
 	return ChatCompletionRequest{
 		Model:           model,
-		ReasoningEffort: "minimal",
+		ReasoningEffort: reasoningEffort,
 		Messages: []OpenAIMessage{
 			{
 				Role:    "user",

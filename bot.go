@@ -13,10 +13,11 @@ import (
 
 // UserSession represents user session data for Discord users
 type UserSession struct {
-	UserID    string
-	History   []string
-	Model     string
-	CreatedAt time.Time
+	UserID          string
+	History         []string
+	Model           string
+	ReasoningEffort string
+	CreatedAt       time.Time
 }
 
 // DiscordBot represents the Discord bot with its configuration and state
@@ -43,6 +44,19 @@ var availableModels = []ModelInfo{
 
 func getDefaultModelName() string {
 	return availableModels[0].Name
+}
+
+func getDefaultReasoningEffort() string {
+	return defaultReasoningEffort
+}
+
+func isValidReasoningEffort(level string) bool {
+	switch level {
+	case "minimal", "medium", "high":
+		return true
+	default:
+		return false
+	}
 }
 
 func isValidModelName(name string) bool {
@@ -181,6 +195,32 @@ func (bot *DiscordBot) registerCommands() error {
 			},
 		},
 		{
+			Name:        "reasoning",
+			Description: "Change the reasoning effort level used for analysis",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "level",
+					Description: "Choose reasoning effort level",
+					Required:    true,
+					Choices: []*discordgo.ApplicationCommandOptionChoice{
+						{
+							Name:  "Minimal (fastest, cheapest)",
+							Value: "minimal",
+						},
+						{
+							Name:  "Medium (balanced)",
+							Value: "medium",
+						},
+						{
+							Name:  "High (most thorough, slowest)",
+							Value: "high",
+						},
+					},
+				},
+			},
+		},
+		{
 			Name:        "history",
 			Description: "View your subreddit analysis history",
 		},
@@ -211,16 +251,28 @@ func (bot *DiscordBot) getUserSession(userID string) *UserSession {
 	session, exists := bot.userSessions[userID]
 	if !exists {
 		session = &UserSession{
-			UserID:    userID,
-			History:   make([]string, 0, AppConfig.HistoryInitCapacity),
-			Model:     getDefaultModelName(), // Default to gpt-5-mini
-			CreatedAt: time.Now(),
+			UserID:          userID,
+			History:         make([]string, 0, AppConfig.HistoryInitCapacity),
+			Model:           getDefaultModelName(),
+			ReasoningEffort: getDefaultReasoningEffort(),
+			CreatedAt:       time.Now(),
 		}
 		bot.userSessions[userID] = session
 	} else {
 		// Migrate invalid/legacy model names to default
+		needsSave := false
+
 		if !isValidModelName(session.Model) {
 			session.Model = getDefaultModelName()
+			needsSave = true
+		}
+
+		if !isValidReasoningEffort(session.ReasoningEffort) {
+			session.ReasoningEffort = getDefaultReasoningEffort()
+			needsSave = true
+		}
+
+		if needsSave {
 			bot.userSessions[userID] = session
 			go bot.saveSessions()
 		}
@@ -275,6 +327,11 @@ func (bot *DiscordBot) loadSessions() {
 		if !isValidModelName(session.Model) {
 			session.Model = getDefaultModelName()
 		}
+
+		// Normalize legacy/invalid reasoning effort
+		if !isValidReasoningEffort(session.ReasoningEffort) {
+			session.ReasoningEffort = getDefaultReasoningEffort()
+		}
 		bot.userSessions[userID] = session
 	}
 
@@ -312,6 +369,8 @@ func (bot *DiscordBot) interactionCreate(s *discordgo.Session, i *discordgo.Inte
 			bot.handleTrendSlashCommand(s, i)
 		} else if i.ApplicationCommandData().Name == "model" {
 			bot.handleModelSlashCommand(s, i)
+		} else if i.ApplicationCommandData().Name == "reasoning" {
+			bot.handleReasoningSlashCommand(s, i)
 		} else if i.ApplicationCommandData().Name == "history" {
 			bot.handleHistorySlashCommand(s, i)
 		} else if i.ApplicationCommandData().Name == "clear" {
@@ -466,7 +525,7 @@ func (bot *DiscordBot) handleTrendAnalysis(s *discordgo.Session, channelID, user
 	}
 
 	// Generate summary
-	summary, err := summarizePosts(subreddit, data, session.Model)
+	summary, err := summarizePosts(subreddit, data, session.Model, session.ReasoningEffort)
 	if err != nil {
 		log.Printf("Failed to generate summary: %v", err)
 		bot.sendMessage(s, channelID, "❌ Failed to generate AI summary")
@@ -539,6 +598,48 @@ func (bot *DiscordBot) handleModelSlashCommand(s *discordgo.Session, i *discordg
 	})
 	if err != nil {
 		log.Printf("Error responding to model interaction: %v", err)
+	}
+}
+
+// handleReasoningSlashCommand handles the /reasoning slash command
+func (bot *DiscordBot) handleReasoningSlashCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	options := i.ApplicationCommandData().Options
+	if len(options) == 0 {
+		bot.respondError(s, i, "Please select a reasoning effort level")
+		return
+	}
+
+	level := strings.ToLower(options[0].StringValue())
+	if !isValidReasoningEffort(level) {
+		bot.respondError(s, i, "Invalid reasoning effort level")
+		return
+	}
+
+	userID := i.Member.User.ID
+	session := bot.getUserSession(userID)
+	session.ReasoningEffort = level
+	bot.saveUserSession(userID, session)
+
+	var humanLabel string
+	switch level {
+	case "minimal":
+		humanLabel = "Minimal (fastest, cheapest)"
+	case "medium":
+		humanLabel = "Medium (balanced)"
+	case "high":
+		humanLabel = "High (most thorough, slowest)"
+	default:
+		humanLabel = level
+	}
+
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("✅ Reasoning effort set to **%s**.\n\nAll future analyses will use this level until you change it again.", humanLabel),
+		},
+	})
+	if err != nil {
+		log.Printf("Error responding to reasoning interaction: %v", err)
 	}
 }
 
