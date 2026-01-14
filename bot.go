@@ -30,13 +30,13 @@ type DiscordBot struct {
 // Available models for selection (OpenAI)
 var availableModels = []ModelInfo{
 	{
-		Codename:    "gpt5mini",
-		Name:        "gpt-5-mini",
+		Codename:    "gpt5nano",
+		Name:        "gpt-5-nano",
 		Description: "Fast and efficient model (default)",
 	},
 	{
-		Codename:    "gpt5",
-		Name:        "gpt-5",
+		Codename:    "gpt52",
+		Name:        "gpt-5.2",
 		Description: "Most capable model for complex tasks",
 	},
 }
