@@ -2,19 +2,20 @@
 
 > Your personal Reddit trend analyst, right in your Discord server.
 
-SubTrends is a Discord bot that turns the latest posts and comments from any subreddit into a concise, engaging trend brief using OpenAI GPT models.
+SubTrends is a Discord bot that turns top posts and top comments from any subreddit into a concise, engaging trend brief using OpenAI models.
 
 ## 🚀 Features
 
--   **Subreddit analysis**: Summarizes themes, sentiment, and hot takes across recent top posts and comments.
--   **OpenAI-powered summaries**: Uses OpenAI Chat Completions (e.g., `gpt-5-mini`, `gpt-5`).
+-   **Subreddit analysis**: Summarizes themes, sentiment, and hot takes across top posts and comments.
+-   **OpenAI-powered summaries**: Uses the OpenAI Chat Completions API.
 -   **Top post links**: Includes direct links to the posts referenced.
 -   **Model selection**: Change the model on the fly with a slash command.
+-   **Reasoning effort selection**: Tune analysis depth (`minimal`, `medium`, `high`) with a slash command.
 -   **History & autocomplete**: Personal per-user history, used to autocomplete `subreddit` when typing `/trend`.
 -   **Long message splitting**: Automatically splits long results to fit Discord limits.
--   **Persistent sessions**: Stores user model choices and history on disk.
--   **Rate-limited & resilient**: Built-in rate limiting, OAuth token caching, and timeouts for Reddit/OpenAI.
--   **Docker support**: Container build for easy deployment.
+-   **Persistent sessions**: Stores user model + reasoning choices and history on disk.
+-   **Rate-limited & resilient**: Built-in rate limiting, OAuth token caching, concurrency controls, and timeouts for Reddit/OpenAI.
+-   **Docker support**: Container build for easy deployment (non-root image + healthcheck).
 
 ## ⚙️ How it works
 
@@ -38,8 +39,13 @@ graph TD
 -   **`/trend <subreddit>`**: Analyze a subreddit (type without `r/`). Autocomplete pulls from your history.
 -   **`/model <model>`**: Change the summary model.
     - Available choices are provided in Discord. Current options:
-        - `gpt-5-mini` — fast and efficient (default)
-        - `gpt-5` — most capable
+        - `gpt-5-nano` — fast and efficient (default)
+        - `gpt-5.2` — most capable
+-   **`/reasoning <level>`**: Change reasoning effort for analysis.
+    - Levels:
+        - `minimal` — fastest/cheapest (default)
+        - `medium` — balanced
+        - `high` — most thorough/slowest
 -   **`/history`**: Show your last N analyzed subreddits (configurable; default 25).
 -   **`/clear`**: Clear your history.
 
@@ -122,7 +128,7 @@ The bot is configured via environment variables. Important settings:
 ### OpenAI
 
 -   `OPENAI_API_ENDPOINT` (default `https://api.openai.com/v1/chat/completions`)
--   `OPENAI_REQUEST_TIMEOUT` (default `45s`)
+-   `OPENAI_REQUEST_TIMEOUT` (default `120s`)
 -   `OPENAI_REQUESTS_PER_MINUTE` (default `10`)
 -   `OPENAI_BURST_SIZE` (default `3`)
 -   `SUMMARY_HEADER` (default `📱 *REDDIT PULSE* 📱\n\n`)
@@ -156,10 +162,20 @@ The bot is configured via environment variables. Important settings:
 
 The current model options are presented as Discord choices:
 
--   `gpt-5-mini` — fast and efficient (default)
--   `gpt-5` — most capable
+-   `gpt-5-nano` — fast and efficient (default)
+-   `gpt-5.2` — most capable
 
 Choose with `/model`. Your selection is saved per-user.
+
+## 🧩 Reasoning effort
+
+SubTrends can optionally pass a `reasoning_effort` setting to the OpenAI request. Choose with `/reasoning`:
+
+-   `minimal` (default)
+-   `medium`
+-   `high`
+
+Your selection is saved per-user.
 
 ## 🧰 Makefile shortcuts
 
@@ -172,7 +188,7 @@ Choose with `/model`. Your selection is saved per-user.
 
 ## 📦 Data & persistence
 
--   User sessions (history, chosen model): `data/sessions.json`
+-   User sessions (history, chosen model, reasoning): `data/sessions.json`
 -   Reddit OAuth token cache: `data/reddit_token.json`
 
 Both files are created automatically. They are written with file mode 0600. When using Docker, they persist if you bind mount `data/`.
