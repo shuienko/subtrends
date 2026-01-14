@@ -60,8 +60,9 @@ type OpenAIMessage struct {
 
 // ChatCompletionRequest represents the structure of a request to the OpenAI API
 type ChatCompletionRequest struct {
-	Model    string          `json:"model"`
-	Messages []OpenAIMessage `json:"messages"`
+	Model           string          `json:"model"`
+	Messages        []OpenAIMessage `json:"messages"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
 }
 
 // ChatCompletionResponse represents the structure of a response from the OpenAI API
@@ -106,9 +107,10 @@ func createOpenAIRequest(model, text, subredditName string) ChatCompletionReques
 	// Format the prompt with the Reddit data and subreddit name
 	prompt := fmt.Sprintf(promptTemplate, subredditName, text)
 
-	// Create the request structure (keep minimal; rely on server defaults)
+	// Create the request structure
 	return ChatCompletionRequest{
-		Model: model,
+		Model:           model,
+		ReasoningEffort: "minimal",
 		Messages: []OpenAIMessage{
 			{
 				Role:    "user",
