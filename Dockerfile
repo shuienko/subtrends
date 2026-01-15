@@ -10,6 +10,9 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 # Runtime stage
 FROM python:3.12-slim
 
+# Install procps for healthcheck
+RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Create non-root user for security
