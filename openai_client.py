@@ -45,10 +45,11 @@ class OpenAIClient:
     def __init__(self, config: Config | None = None):
         self.config = config or get_config()
         
-        # Rate limiter: requests per minute
-        # Convert requests per minute to rate per second
-        rate = self.config.openai_requests_per_minute / 60.0
-        self._limiter = AsyncLimiter(rate, 1.0)
+        # Rate limiter: max_rate tokens per time_period seconds
+        # AsyncLimiter(max_rate, time_period) allows max_rate requests per time_period
+        self._limiter = AsyncLimiter(
+            self.config.openai_requests_per_minute, 60.0
+        )
 
     async def summarize_posts(
         self,
