@@ -61,7 +61,7 @@ fmt: ## Format code with ruff
 	fi
 
 clean: ## Clean virtual environment and cache files
-	rm -rf $(VENV_DIR) __pycache__ .pytest_cache .ruff_cache *.pyc
+	rm -rf $(VENV_DIR) __pycache__ .pytest_cache .ruff_cache
 
 docker-build: ## Build Docker image $(DOCKER_IMAGE)
 	docker build -t $(DOCKER_IMAGE) .
