@@ -1,49 +1,39 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM python:3.12-slim AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy go mod and sum files
-COPY go.mod go.sum ./
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-# Download all dependencies
-RUN go mod download
+# Runtime stage
+FROM python:3.12-slim
 
-# Copy the source code
-COPY . .
-
-# Build the application (static, portable)
-ARG TARGETPLATFORM
-ENV CGO_ENABLED=0
-RUN GOOS=linux GOARCH=$(echo $TARGETPLATFORM | cut -d'/' -f2) GOARM=$(echo $TARGETPLATFORM | cut -d'/' -f3 | sed 's/v//') go build -ldflags='-s -w' -o subtrends-bot .
-
-# Final stage
-FROM alpine:3.19
-
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
-
-# Create non-root user and group
-RUN addgroup -S app && adduser -S app -G app
-
-# Set working directory
 WORKDIR /app
 
-# Copy the binary from builder
-COPY --from=builder /app/subtrends-bot .
+# Create non-root user for security
+RUN groupadd -r subtrends && useradd -r -g subtrends subtrends
 
-# Create data directory for token/session cache; ensure ownership
-RUN mkdir -p /app/data && chown -R app:app /app
+# Copy installed packages from builder
+COPY --from=builder /root/.local /home/subtrends/.local
+
+# Copy application code
+COPY *.py ./
+
+# Create data directory with proper permissions
+RUN mkdir -p /app/data && chown -R subtrends:subtrends /app
 
 # Switch to non-root user
-USER app
+USER subtrends
 
-# Expose a volume for persistence
-VOLUME ["/app/data"]
+# Add local packages to PATH
+ENV PATH=/home/subtrends/.local/bin:$PATH
+ENV PYTHONUNBUFFERED=1
 
-# Add a basic healthcheck ensuring the bot process is running
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD sh -c 'grep -qa subtrends-bot /proc/1/cmdline || exit 1'
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
 
-# Command to run the Discord bot
-CMD ["./subtrends-bot"]
+# Run the bot
+CMD ["python", "main.py"]

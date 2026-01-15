@@ -6,19 +6,18 @@ SHELL := /bin/zsh
 -include .env
 export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env 2>/dev/null)
 
-# Go / project variables
-GO              ?= go
-PKG             ?= ./...
-BIN_DIR         ?= bin
-BINARY_NAME     ?= subtrends-bot
-OUTPUT          ?= $(BIN_DIR)/$(BINARY_NAME)
+# Python variables
+PYTHON          ?= python3
+VENV_DIR        ?= .venv
+PIP             ?= $(VENV_DIR)/bin/pip
+PYTHON_VENV     ?= $(VENV_DIR)/bin/python
 
 # Docker variables
 DOCKER_IMAGE    ?= subtrends
 CONTAINER_NAME  ?= subtrends-bot
 ENV_FILE        ?= .env
 
-.PHONY: help build run test coverage fmt vet tidy lint check clean docker-build docker-run docker-stop ensure-data-dir init-env init
+.PHONY: help venv install run test lint fmt clean docker-build docker-run docker-stop ensure-data-dir init-env init
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -26,37 +25,43 @@ help: ## Show this help
 ensure-data-dir: ## Create local data directory if missing
 	@mkdir -p data
 
-build: ensure-data-dir ## Build the Go binary into $(OUTPUT)
-	@mkdir -p $(BIN_DIR)
-	$(GO) build -o $(OUTPUT) .
+venv: ## Create virtual environment
+	@if [ ! -d $(VENV_DIR) ]; then $(PYTHON) -m venv $(VENV_DIR); fi
+
+install: venv ## Install dependencies into virtual environment
+	$(PIP) install --upgrade pip
+	$(PIP) install -r requirements.txt
 
 run: ensure-data-dir ## Run the bot locally (uses variables from .env if present)
-	$(GO) run .
+	@if [ -d $(VENV_DIR) ]; then \
+		$(PYTHON_VENV) main.py; \
+	else \
+		$(PYTHON) main.py; \
+	fi
 
-test: ## Run tests with race detector and coverage
-	$(GO) test $(PKG) -race -covermode=atomic -coverprofile=coverage.out -count=1 -v
+test: ## Run tests with pytest
+	@if [ -d $(VENV_DIR) ]; then \
+		$(VENV_DIR)/bin/pytest -v; \
+	else \
+		pytest -v; \
+	fi
 
-coverage: test ## Generate HTML coverage report at coverage.html
-	$(GO) tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report: coverage.html"
+lint: ## Run linting with ruff
+	@if [ -d $(VENV_DIR) ]; then \
+		$(VENV_DIR)/bin/ruff check .; \
+	else \
+		ruff check .; \
+	fi
 
-fmt: ## Format code using go fmt
-	$(GO) fmt $(PKG)
+fmt: ## Format code with ruff
+	@if [ -d $(VENV_DIR) ]; then \
+		$(VENV_DIR)/bin/ruff format .; \
+	else \
+		ruff format .; \
+	fi
 
-vet: ## Run go vet static analysis
-	$(GO) vet $(PKG)
-
-tidy: ## Sync go.mod and go.sum
-	$(GO) mod tidy
-
-lint: vet ## Basic lint alias (currently runs go vet)
-	@echo "Lint completed"
-
-check: fmt vet test ## Run formatting, vet, and tests
-
-clean: ## Clean build outputs and coverage
-	rm -rf $(BIN_DIR) coverage.out coverage.html
-	$(GO) clean -modcache
+clean: ## Clean virtual environment and cache files
+	rm -rf $(VENV_DIR) __pycache__ .pytest_cache .ruff_cache *.pyc
 
 docker-build: ## Build Docker image $(DOCKER_IMAGE)
 	docker build -t $(DOCKER_IMAGE) .
@@ -87,13 +92,12 @@ init-env: ## Create a starter .env from README example (if missing)
 	  "OPENAI_API_KEY=" \
 	  "" \
 	  "# --- Optional Settings ---" \
-	  "# You can override the default values from config.go" \
+	  "# You can override the default values from config.py" \
 	  "REDDIT_POST_LIMIT=7" \
 	  "REDDIT_COMMENT_LIMIT=7" \
 	  "REDDIT_TIMEFRAME=day" \
 	  > .env
 	@echo "Wrote .env from template. Fill in required values before running."
 
-init: tidy build ## One-shot: tidy modules and build
-
+init: install ## One-shot: create venv and install dependencies
 
