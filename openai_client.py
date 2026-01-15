@@ -172,5 +172,4 @@ class OpenAIClient:
             text = text.replace("COMMUNITY PULSE", "*COMMUNITY PULSE*")
             text = text.replace("HOT TAKES", "*HOT TAKES*")
         
-        # Add header
-        return self.config.summary_header + text
+        return text

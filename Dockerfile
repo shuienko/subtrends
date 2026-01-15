@@ -31,9 +31,9 @@ USER subtrends
 ENV PATH=/home/subtrends/.local/bin:$PATH
 ENV PYTHONUNBUFFERED=1
 
-# Health check
+# Health check - verify the bot process is running
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)"
+    CMD pgrep -f "python main.py" > /dev/null || exit 1
 
 # Run the bot
 CMD ["python", "main.py"]
