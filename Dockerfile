@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Create non-root user for security
-RUN groupadd -r subtrends && useradd -r -g subtrends subtrends
+RUN groupadd -r subtrends && useradd -r -g subtrends -m -d /home/subtrends subtrends
 
 # Copy installed packages from builder
 COPY --from=builder /root/.local /home/subtrends/.local

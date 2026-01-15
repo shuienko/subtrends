@@ -429,6 +429,7 @@ class SubTrendsBot(commands.Bot):
             # If single line is too long, truncate it
             if len(line) > max_length:
                 line = line[:max_length - 3] + "..."
+                line_length = len(line) + 1
             
             current_chunk.append(line)
             current_length += line_length
