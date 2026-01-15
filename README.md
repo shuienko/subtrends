@@ -4,7 +4,7 @@
 
 SubTrends is a Discord bot that turns top posts and top comments from any subreddit into a concise, engaging trend brief using OpenAI models.
 
-## 🚀 Features
+## Features
 
 -   **Subreddit analysis**: Summarizes themes, sentiment, and hot takes across top posts and comments.
 -   **OpenAI-powered summaries**: Uses the OpenAI Chat Completions API.
@@ -17,7 +17,7 @@ SubTrends is a Discord bot that turns top posts and top comments from any subred
 -   **Rate-limited & resilient**: Built-in rate limiting, OAuth token caching, concurrency controls, and timeouts for Reddit/OpenAI.
 -   **Docker support**: Container build for easy deployment (non-root image + healthcheck).
 
-## ⚙️ How it works
+## How it works
 
 1. A user invokes `/trend <subreddit>`.
 2. The bot fetches top posts and their top comments via the Reddit API (with OAuth).
@@ -34,7 +34,7 @@ graph TD
     B -- Post summary --> A
 ```
 
-## 🤖 Discord commands
+## Discord commands
 
 -   **`/trend <subreddit>`**: Analyze a subreddit (type without `r/`). Autocomplete pulls from your history.
 -   **`/model <model>`**: Change the summary model.
@@ -51,11 +51,11 @@ graph TD
 
 Legacy text command is also supported by default: type `!trend <subreddit>`.
 
-## 🛠️ Setup & installation
+## Setup & installation
 
 ### Prerequisites
 
--   Go 1.23+
+-   Python 3.12+
 -   Docker (optional)
 -   A Reddit app (client ID/secret)
 -   A Discord bot (token)
@@ -84,7 +84,7 @@ REDDIT_CLIENT_SECRET=your_reddit_client_secret
 # OpenAI
 OPENAI_API_KEY=your_openai_api_key
 
-# --- Optional settings (override defaults from config.go) ---
+# --- Optional settings (override defaults from config.py) ---
 REDDIT_POST_LIMIT=7
 REDDIT_COMMENT_LIMIT=7
 REDDIT_TIMEFRAME=day  # day, week, month, year, all
@@ -94,16 +94,19 @@ You can also generate a starter file with `make init-env`.
 
 ### 3) Run the bot
 
-Using Go:
+Using Python directly:
 
 ```bash
-go mod tidy
-go run .
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
 ```
 
 Using Makefile helpers:
 
 ```bash
+make init   # create venv and install dependencies
 make run    # run locally, respects .env if present
 ```
 
@@ -115,7 +118,7 @@ docker build -t subtrends .
 docker run --env-file .env --name subtrends-bot -d -v $(pwd)/data:/app/data subtrends
 ```
 
-## 🔩 Configuration
+## Configuration
 
 The bot is configured via environment variables. Important settings:
 
@@ -158,7 +161,7 @@ The bot is configured via environment variables. Important settings:
 -   `LEGACY_COMMAND_PREFIX` (default `!trend `)
 -   `SHUTDOWN_TIMEOUT` (default `5s`)
 
-## 🧠 Models
+## Models
 
 The current model options are presented as Discord choices:
 
@@ -167,7 +170,7 @@ The current model options are presented as Discord choices:
 
 Choose with `/model`. Your selection is saved per-user.
 
-## 🧩 Reasoning effort
+## Reasoning effort
 
 SubTrends can optionally pass a `reasoning_effort` setting to the OpenAI request. Choose with `/reasoning`:
 
@@ -177,25 +180,28 @@ SubTrends can optionally pass a `reasoning_effort` setting to the OpenAI request
 
 Your selection is saved per-user.
 
-## 🧰 Makefile shortcuts
+## Makefile shortcuts
 
 -   `make help` — list tasks
+-   `make install` — create venv and install dependencies
 -   `make run` — run locally
--   `make build` — build binary to `bin/subtrends-bot`
--   `make tidy` — `go mod tidy`
--   `make test` / `make coverage` — run tests and generate report
+-   `make lint` — run ruff linter
+-   `make fmt` — format code with ruff
+-   `make clean` — remove venv and cache files
 -   `make docker-build` / `make docker-run` — build/run container
 
-## 📦 Data & persistence
+## Data & persistence
 
 -   User sessions (history, chosen model, reasoning): `data/sessions.json`
 -   Reddit OAuth token cache: `data/reddit_token.json`
 
 Both files are created automatically. They are written with file mode 0600. When using Docker, they persist if you bind mount `data/`.
 
-## 💻 Tech stack
+## Tech stack
 
--   Go + [discordgo](https://github.com/bwmarrin/discordgo)
+-   Python + [discord.py](https://github.com/Rapptz/discord.py)
+-   [aiohttp](https://docs.aiohttp.org/) for async HTTP
+-   [aiolimiter](https://github.com/mjpieters/aiolimiter) for rate limiting
 -   OpenAI Chat Completions API
 -   Reddit API (OAuth)
 -   Docker
