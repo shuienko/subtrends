@@ -37,13 +37,19 @@ class RedditClient:
     def __init__(self, config: Config | None = None):
         self.config = config or get_config()
         self._token_data: TokenData | None = None
-        self._token_lock = asyncio.Lock()
+        self._token_lock: asyncio.Lock | None = None
         
         # Rate limiter: requests per second with burst
         self._limiter = AsyncLimiter(
             self.config.reddit_requests_per_second,
             1.0  # per second
         )
+
+    def _get_token_lock(self) -> asyncio.Lock:
+        """Create the token lock lazily when an event loop is running."""
+        if self._token_lock is None:
+            self._token_lock = asyncio.Lock()
+        return self._token_lock
 
     async def _make_request(
         self,
@@ -133,7 +139,8 @@ class RedditClient:
                 return self._token_data.access_token
         
         # Need to acquire new token
-        async with self._token_lock:
+        token_lock = self._get_token_lock()
+        async with token_lock:
             # Double-check after acquiring lock
             if self._token_data:
                 now = datetime.now(timezone.utc)

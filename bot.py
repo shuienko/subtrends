@@ -112,7 +112,7 @@ class SubTrendsBot(commands.Bot):
         )
         
         self._user_sessions: dict[str, UserSession] = {}
-        self._session_lock = asyncio.Lock()
+        self._session_lock: asyncio.Lock | None = None
         self._reddit_client = RedditClient(self.config)
         self._openai_client = OpenAIClient(self.config)
         
@@ -139,9 +139,16 @@ class SubTrendsBot(commands.Bot):
         
         logger.info(f"Loaded {len(self._user_sessions)} user sessions")
 
+    def _get_session_lock(self) -> asyncio.Lock:
+        """Create the session lock lazily when an event loop is running."""
+        if self._session_lock is None:
+            self._session_lock = asyncio.Lock()
+        return self._session_lock
+
     async def _save_sessions(self) -> None:
         """Save sessions to file."""
-        async with self._session_lock:
+        session_lock = self._get_session_lock()
+        async with session_lock:
             data = {
                 user_id: session.to_dict()
                 for user_id, session in self._user_sessions.items()
