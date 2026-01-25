@@ -65,6 +65,7 @@ A Discord bot that fetches Reddit news from configured subreddit groups, summari
 | `REDDIT_CLIENT_SECRET` | Yes | Reddit API client secret |
 | `REDDIT_USER_AGENT` | No | User agent for Reddit API (default: `subtrends:v1.0`) |
 | `ANTHROPIC_API_KEY` | Yes | Anthropic API key |
+| `DEFAULT_MODEL` | No | Anthropic model for summaries (default: `claude-haiku-4-5`) |
 | `SUB_<NAME>` | Yes | Subreddit groups (comma-separated) |
 | `NUM_POSTS` | No | Posts per subreddit (default: 7) |
 | `NUM_COMMENTS` | No | Comments per post (default: 7) |
