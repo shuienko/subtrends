@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-sonnet-4-5"
+DEFAULT_MODEL = "claude-haiku-4-5"
 
 
 class NewsCog(commands.Cog):
@@ -104,15 +104,17 @@ class NewsCog(commands.Cog):
                     # Create preview (first 500 chars)
                     preview = summary[:500] + "..." if len(summary) > 500 else summary
 
-                    # Create markdown file with full summary
-                    file_content = f"# {grp.upper()} - News Summary\n\n{summary}"
+                    # Create text file with full summary
+                    header = f"{grp.upper()} - NEWS SUMMARY"
+                    header_line = "=" * len(header)
+                    file_content = f"{header}\n{header_line}\n\n{summary}"
                     file = discord.File(
                         fp=io.BytesIO(file_content.encode("utf-8")),
-                        filename=f"{grp}_news_{date.today().isoformat()}.md",
+                        filename=f"{grp}_news_{date.today().isoformat()}.txt",
                     )
 
                     await interaction.followup.send(
-                        content=f"# {grp.upper()} - News Summary\n\n{preview}",
+                        content=f"**{grp.upper()} - News Summary**\n\n{preview}",
                         file=file,
                     )
 

@@ -8,7 +8,7 @@ import anthropic
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-sonnet-4-5"
+DEFAULT_MODEL = "claude-haiku-4-5"
 DEFAULT_MAX_TOKENS = 4096
 MAX_RETRIES = 3
 INITIAL_RETRY_DELAY = 2  # seconds

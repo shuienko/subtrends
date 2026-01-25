@@ -18,7 +18,12 @@ Given Reddit posts and their top comments, create a concise, informative summary
 6. Adds a touch of irony or clever commentary where appropriate
    (but don't overdo it - one or two witty remarks per story max)
 
-Format: Use markdown with headers for each major story. Keep total length under 1500 words.
+Format: Use PLAIN TEXT with ASCII formatting (no markdown). For each major story:
+- Use UPPERCASE for main headers, followed by a line of === underneath
+- Use bullet points with • or - for lists
+- Use *asterisks* for emphasis instead of bold
+- Keep total length under 1500 words
+
 Focus on the substance and key developments, not on Reddit-specific details.
 Let your personality shine through occasionally."""
 
@@ -27,7 +32,7 @@ Translate the following text to Ukrainian:
 
 1. Maintain journalistic tone and style
 2. Use standard Ukrainian (literary language, not Surzhyk)
-3. Preserve markdown formatting exactly
+3. Preserve ASCII formatting exactly (UPPERCASE headers, === lines, • bullets, *emphasis*)
 4. Transliterate proper nouns appropriately (use Ukrainian conventions)
 5. Keep the same structure and emphasis as the original
 6. For technical terms, use commonly accepted Ukrainian equivalents
@@ -139,11 +144,12 @@ class Summarizer:
 
         # Step 3: Append source URLs
         if posts:
-            urls_section = "\n\n---\n\n**Sources / Джерела:**\n"
+            urls_section = "\n\n════════════════════════════════════════\n"
+            urls_section += "SOURCES / ДЖЕРЕЛА\n"
+            urls_section += "════════════════════════════════════════\n\n"
             for post in posts:
-                # Wrap URL in <> to suppress Discord embeds
                 title = post.title[:60] + "..." if len(post.title) > 60 else post.title
-                urls_section += f"- [{title}](<{post.full_url}>)\n"
+                urls_section += f"• {title}\n  {post.full_url}\n\n"
             translation += urls_section
 
         return translation
