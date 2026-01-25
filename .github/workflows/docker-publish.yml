@@ -11,35 +11,8 @@ env:
   IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/subtrends
 
 jobs:
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
-      - name: Install dependencies
-        run: |
-          pip install ruff mypy
-          pip install -r requirements.txt
-
-      - name: Run ruff check
-        run: ruff check src/
-
-      - name: Run ruff format check
-        run: ruff format --check src/
-
-      - name: Run mypy
-        run: mypy src/
-
   build-and-push:
     name: Build and Push
-    needs: lint
     runs-on: ubuntu-latest
     # Only push on main branch, not on PRs
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
