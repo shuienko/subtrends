@@ -60,7 +60,10 @@ async def main() -> None:
     )
 
     # Initialize Anthropic client
-    anthropic_client = AnthropicClient(api_key=config.anthropic_api_key)
+    anthropic_client = AnthropicClient(
+        api_key=config.anthropic_api_key,
+        default_model=config.default_model,
+    )
 
     # Initialize services
     fetcher = NewsFetcher(
@@ -99,7 +102,12 @@ async def main() -> None:
         logger.warning("Disconnected from Discord")
 
     # Add the news cog
-    news_cog = NewsCog(bot=bot, fetcher=fetcher, summarizer=summarizer)
+    news_cog = NewsCog(
+        bot=bot,
+        fetcher=fetcher,
+        summarizer=summarizer,
+        default_model=config.default_model,
+    )
     await bot.add_cog(news_cog)
     logger.info("Loaded NewsCog with commands: /news, /setmodel, /getmodel, /groups")
 

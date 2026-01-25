@@ -42,7 +42,7 @@ class TokenCache:
                 return None
 
             try:
-                async with aiofiles.open(self.path, mode="r") as f:
+                async with aiofiles.open(self.path) as f:
                     data = json.loads(await f.read())
                     token = CachedToken(
                         access_token=data["access_token"],
@@ -50,8 +50,10 @@ class TokenCache:
                     )
 
                     if token.is_valid():
-                        logger.debug("Using cached token (expires in %.0f seconds)",
-                                   token.expires_at - time.time())
+                        logger.debug(
+                            "Using cached token (expires in %.0f seconds)",
+                            token.expires_at - time.time(),
+                        )
                         return token
                     else:
                         logger.debug("Cached token has expired")

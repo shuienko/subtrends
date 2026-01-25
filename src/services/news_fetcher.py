@@ -54,24 +54,19 @@ class NewsFetcher:
 
         if group_name_lower not in self.subreddit_groups:
             available = ", ".join(self.subreddit_groups.keys())
-            raise ValueError(
-                f"Unknown group '{group_name}'. Available groups: {available}"
-            )
+            raise ValueError(f"Unknown group '{group_name}'. Available groups: {available}")
 
         subreddits = self.subreddit_groups[group_name_lower]
         logger.info(f"Fetching news for group '{group_name}' from {len(subreddits)} subreddits")
 
         # Fetch posts from all subreddits in parallel
-        tasks = [
-            self._fetch_subreddit(subreddit)
-            for subreddit in subreddits
-        ]
+        tasks = [self._fetch_subreddit(subreddit) for subreddit in subreddits]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Collect successful results
         all_posts: list[Post] = []
         for subreddit, result in zip(subreddits, results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.error(f"Failed to fetch r/{subreddit}: {result}")
                 continue
             all_posts.extend(result)
@@ -79,37 +74,13 @@ class NewsFetcher:
         # Sort by score descending
         all_posts.sort(key=lambda p: p.score, reverse=True)
 
-        logger.info(
-            f"Fetched total of {len(all_posts)} posts for group '{group_name}'"
-        )
+        logger.info(f"Fetched total of {len(all_posts)} posts for group '{group_name}'")
 
         return SubredditGroup(
             name=group_name_lower,
             subreddits=subreddits,
             posts=all_posts,
         )
-
-    async def fetch_all_groups(self) -> list[SubredditGroup]:
-        """
-        Fetch all posts and comments for all subreddit groups.
-
-        Returns:
-            List of SubredditGroup objects
-        """
-        tasks = [
-            self.fetch_group(group_name)
-            for group_name in self.subreddit_groups
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        groups: list[SubredditGroup] = []
-        for group_name, result in zip(self.subreddit_groups.keys(), results):
-            if isinstance(result, Exception):
-                logger.error(f"Failed to fetch group '{group_name}': {result}")
-                continue
-            groups.append(result)
-
-        return groups
 
     async def _fetch_subreddit(self, subreddit: str) -> list[Post]:
         """Fetch posts with comments from a single subreddit."""

@@ -8,7 +8,6 @@ import anthropic
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-sonnet-4-5"
 DEFAULT_MAX_TOKENS = 4096
 MAX_RETRIES = 3
 INITIAL_RETRY_DELAY = 2  # seconds
@@ -17,7 +16,7 @@ INITIAL_RETRY_DELAY = 2  # seconds
 class AnthropicClient:
     """Async wrapper for the Anthropic API."""
 
-    def __init__(self, api_key: str | None = None, default_model: str = DEFAULT_MODEL):
+    def __init__(self, api_key: str | None = None, default_model: str = "claude-haiku-4-5"):
         """
         Initialize the Anthropic client.
 
@@ -82,7 +81,7 @@ class AnthropicClient:
 
             except anthropic.RateLimitError as e:
                 last_error = e
-                delay = INITIAL_RETRY_DELAY * (2 ** attempt)
+                delay = INITIAL_RETRY_DELAY * (2**attempt)
                 logger.warning(
                     f"Anthropic rate limit error (attempt {attempt + 1}/{MAX_RETRIES}), "
                     f"retrying in {delay}s: {e}"
@@ -92,7 +91,7 @@ class AnthropicClient:
             except anthropic.InternalServerError as e:
                 # Handle 529 Overloaded and other 5xx errors
                 last_error = e
-                delay = INITIAL_RETRY_DELAY * (2 ** attempt)
+                delay = INITIAL_RETRY_DELAY * (2**attempt)
                 logger.warning(
                     f"Anthropic server error (attempt {attempt + 1}/{MAX_RETRIES}), "
                     f"retrying in {delay}s: {e}"
