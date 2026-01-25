@@ -1,6 +1,8 @@
 """Discord slash commands for news fetching."""
 
+import io
 import logging
+from datetime import date
 from typing import TYPE_CHECKING
 
 import discord
@@ -15,8 +17,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-MAX_DISCORD_LENGTH = 2000
-DEFAULT_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_MODEL = "claude-sonnet-4-5"
 
 
 class NewsCog(commands.Cog):
@@ -41,7 +42,7 @@ class NewsCog(commands.Cog):
         return self.model_settings.get(guild_id, DEFAULT_MODEL)
 
     @app_commands.command(name="news", description="Get summarized Reddit news in Ukrainian")
-    @app_commands.describe(group="News group to fetch (e.g., world, spain). Leave empty for all groups.")
+    @app_commands.describe(group="News group to fetch (e.g., world, spain). Empty for all.")
     async def news(self, interaction: "Interaction", group: str | None = None) -> None:
         """Fetch and summarize Reddit news."""
         # Defer response for long operation (gives 15 minutes instead of 3 seconds)
@@ -100,25 +101,31 @@ class NewsCog(commands.Cog):
                         model=model,
                     )
 
-                    # Send summary in chunks
-                    header = f"# {grp.upper()} - News Summary\n\n"
-                    full_message = header + summary
+                    # Create preview (first 500 chars)
+                    preview = summary[:500] + "..." if len(summary) > 500 else summary
 
-                    for chunk in self._chunk_message(full_message):
-                        await interaction.followup.send(chunk)
+                    # Create markdown file with full summary
+                    file_content = f"# {grp.upper()} - News Summary\n\n{summary}"
+                    file = discord.File(
+                        fp=io.BytesIO(file_content.encode("utf-8")),
+                        filename=f"{grp}_news_{date.today().isoformat()}.md",
+                    )
+
+                    await interaction.followup.send(
+                        content=f"# {grp.upper()} - News Summary\n\n{preview}",
+                        file=file,
+                    )
 
                 except Exception as e:
                     logger.exception(f"Error processing group '{grp}'")
-                    await interaction.followup.send(
-                        f"Error fetching news for **{grp}**: {e}"
-                    )
+                    await interaction.followup.send(f"Error fetching news for **{grp}**: {e}")
 
         except Exception as e:
             logger.exception("Error in /news command")
             await interaction.followup.send(f"An error occurred: {e}")
 
     @app_commands.command(name="setmodel", description="Set the AI model for news summaries")
-    @app_commands.describe(model="Anthropic model name (e.g., claude-sonnet-4-20250514, claude-haiku-3-5-20241022)")
+    @app_commands.describe(model="Anthropic model name (e.g., claude-sonnet-4-20250514)")
     async def setmodel(self, interaction: "Interaction", model: str) -> None:
         """Set the Anthropic model for this server."""
         guild_id = interaction.guild_id
@@ -159,9 +166,7 @@ class NewsCog(commands.Cog):
         available_groups = self.fetcher.get_available_groups()
 
         if not available_groups:
-            await interaction.response.send_message(
-                "No subreddit groups configured."
-            )
+            await interaction.response.send_message("No subreddit groups configured.")
             return
 
         lines = ["**Available News Groups:**\n"]
@@ -170,26 +175,6 @@ class NewsCog(commands.Cog):
             lines.append(f"- **{name.upper()}**: {subs}")
 
         await interaction.response.send_message("\n".join(lines))
-
-    def _chunk_message(self, text: str) -> list[str]:
-        """Split message into Discord-safe chunks."""
-        chunks: list[str] = []
-
-        while text:
-            if len(text) <= MAX_DISCORD_LENGTH:
-                chunks.append(text)
-                break
-
-            # Find last newline before limit for cleaner splitting
-            split_at = text.rfind("\n", 0, MAX_DISCORD_LENGTH)
-            if split_at == -1 or split_at < MAX_DISCORD_LENGTH // 2:
-                # No good newline found, split at limit
-                split_at = MAX_DISCORD_LENGTH
-
-            chunks.append(text[:split_at])
-            text = text[split_at:].lstrip("\n")
-
-        return chunks
 
 
 async def setup(bot: commands.Bot) -> None:

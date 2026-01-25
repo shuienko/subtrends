@@ -4,8 +4,8 @@ import asyncio
 import logging
 import time
 from collections import deque
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 

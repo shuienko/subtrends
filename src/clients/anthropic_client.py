@@ -82,7 +82,7 @@ class AnthropicClient:
 
             except anthropic.RateLimitError as e:
                 last_error = e
-                delay = INITIAL_RETRY_DELAY * (2 ** attempt)
+                delay = INITIAL_RETRY_DELAY * (2**attempt)
                 logger.warning(
                     f"Anthropic rate limit error (attempt {attempt + 1}/{MAX_RETRIES}), "
                     f"retrying in {delay}s: {e}"
@@ -92,7 +92,7 @@ class AnthropicClient:
             except anthropic.InternalServerError as e:
                 # Handle 529 Overloaded and other 5xx errors
                 last_error = e
-                delay = INITIAL_RETRY_DELAY * (2 ** attempt)
+                delay = INITIAL_RETRY_DELAY * (2**attempt)
                 logger.warning(
                     f"Anthropic server error (attempt {attempt + 1}/{MAX_RETRIES}), "
                     f"retrying in {delay}s: {e}"

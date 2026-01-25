@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -20,11 +20,13 @@ DEFAULT_TOKEN_EXPIRY = 86400  # 24 hours
 
 class RedditClientError(Exception):
     """Base exception for Reddit client errors."""
+
     pass
 
 
-class RateLimitExceeded(RedditClientError):
+class RateLimitExceededError(RedditClientError):
     """Raised when rate limit retries are exhausted."""
+
     pass
 
 
@@ -114,7 +116,7 @@ class RedditClient:
         endpoint: str,
         max_retries: int = 3,
         **kwargs: Any,
-    ) -> dict[str, Any]:
+    ) -> Any:
         """Make an authenticated API request with rate limiting and retries."""
         client = await self._ensure_client()
         token = await self._ensure_token()
@@ -160,9 +162,9 @@ class RedditClient:
                     if attempt == max_retries - 1:
                         raise RedditClientError(f"Request failed: {e}") from e
                     logger.warning(f"Request error (attempt {attempt + 1}): {e}")
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    await asyncio.sleep(2**attempt)  # Exponential backoff
 
-        raise RateLimitExceeded("Max retries exceeded for Reddit API request")
+        raise RateLimitExceededError("Max retries exceeded for Reddit API request")
 
     async def fetch_top_posts(
         self,
@@ -197,8 +199,8 @@ class RedditClient:
 
             # Filter posts from last 24 hours
             created_utc = post_data.get("created_utc", 0)
-            post_time = datetime.fromtimestamp(created_utc, tz=timezone.utc)
-            cutoff_time = datetime.now(tz=timezone.utc) - timedelta(hours=24)
+            post_time = datetime.fromtimestamp(created_utc, tz=UTC)
+            cutoff_time = datetime.now(tz=UTC) - timedelta(hours=24)
 
             if post_time < cutoff_time:
                 continue

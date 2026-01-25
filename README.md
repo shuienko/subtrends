@@ -4,7 +4,7 @@ A Discord bot that fetches Reddit news from configured subreddit groups, summari
 
 ## Features
 
-- `/news [group]` - Fetch and summarize Reddit news (in Ukrainian)
+- `/news [group]` - Fetch and summarize Reddit news (summary attached as .md file)
 - `/setmodel <model>` - Set the AI model for summaries (per-server)
 - `/getmodel` - Show the current model setting
 - `/groups` - List available news groups
