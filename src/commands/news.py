@@ -17,8 +17,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-haiku-4-5"
-
 
 class NewsCog(commands.Cog):
     """Discord cog for news-related commands."""
@@ -28,18 +26,20 @@ class NewsCog(commands.Cog):
         bot: commands.Bot,
         fetcher: NewsFetcher,
         summarizer: Summarizer,
+        default_model: str,
     ):
         self.bot = bot
         self.fetcher = fetcher
         self.summarizer = summarizer
+        self.default_model = default_model
         # Guild-specific model settings (in-memory)
         self.model_settings: dict[int, str] = {}
 
     def _get_model(self, guild_id: int | None) -> str:
         """Get the model setting for a guild."""
         if guild_id is None:
-            return DEFAULT_MODEL
-        return self.model_settings.get(guild_id, DEFAULT_MODEL)
+            return self.default_model
+        return self.model_settings.get(guild_id, self.default_model)
 
     @app_commands.command(name="news", description="Get summarized Reddit news in Ukrainian")
     @app_commands.describe(group="News group to fetch (e.g., world, spain). Empty for all.")
@@ -101,9 +101,6 @@ class NewsCog(commands.Cog):
                         model=model,
                     )
 
-                    # Create preview (first 500 chars)
-                    preview = summary[:500] + "..." if len(summary) > 500 else summary
-
                     # Create text file with full summary
                     header = f"{grp.upper()} - NEWS SUMMARY"
                     header_line = "=" * len(header)
@@ -114,7 +111,7 @@ class NewsCog(commands.Cog):
                     )
 
                     await interaction.followup.send(
-                        content=f"**{grp.upper()} - News Summary**\n\n{preview}",
+                        content=f"**{grp.upper()}**",
                         file=file,
                     )
 
@@ -177,10 +174,3 @@ class NewsCog(commands.Cog):
             lines.append(f"- **{name.upper()}**: {subs}")
 
         await interaction.response.send_message("\n".join(lines))
-
-
-async def setup(bot: commands.Bot) -> None:
-    """Setup function for loading the cog."""
-    # This is called when using bot.load_extension()
-    # We don't use it directly since we need to pass fetcher and summarizer
-    pass

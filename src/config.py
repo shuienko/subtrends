@@ -36,6 +36,9 @@ class Config:
     max_concurrent_requests: int = 5
     requests_per_minute: int = 60
 
+    # Anthropic model
+    default_model: str = "claude-haiku-4-5"
+
     @classmethod
     def from_env(cls) -> "Config":
         """Load configuration from environment variables."""
@@ -70,6 +73,7 @@ class Config:
         num_comments = int(os.environ.get("NUM_COMMENTS", "7"))
         max_concurrent = int(os.environ.get("MAX_CONCURRENT_REQUESTS", "5"))
         requests_per_min = int(os.environ.get("REQUESTS_PER_MINUTE", "60"))
+        default_model = os.environ.get("DEFAULT_MODEL", "claude-haiku-4-5")
 
         return cls(
             discord_token=discord_token,
@@ -82,6 +86,7 @@ class Config:
             num_comments=num_comments,
             max_concurrent_requests=max_concurrent,
             requests_per_minute=requests_per_min,
+            default_model=default_model,
         )
 
     @staticmethod

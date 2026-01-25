@@ -58,7 +58,7 @@ class RedditClient:
         )
         return self
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    async def __aexit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
         """Close HTTP client on context exit."""
         if self._client:
             await self._client.aclose()

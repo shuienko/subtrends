@@ -45,16 +45,14 @@ MAX_CONTENT_LENGTH = 100000  # Max chars to send to API
 class Summarizer:
     """Service for summarizing Reddit posts and translating to Ukrainian."""
 
-    def __init__(self, client: AnthropicClient, default_model: str | None = None):
+    def __init__(self, client: AnthropicClient):
         """
         Initialize the summarizer.
 
         Args:
             client: AnthropicClient instance
-            default_model: Default model to use (overrides client default)
         """
         self.client = client
-        self.default_model = default_model
 
     async def summarize(
         self,
@@ -77,7 +75,6 @@ class Summarizer:
             return f"No posts found for group '{group_name}' in the last 24 hours."
 
         prompt = self._build_summary_prompt(group_name, posts)
-        model = model or self.default_model
 
         logger.info(f"Summarizing {len(posts)} posts for group '{group_name}'")
 
@@ -106,8 +103,6 @@ class Summarizer:
         """
         if not text:
             return ""
-
-        model = model or self.default_model
 
         logger.info("Translating summary to Ukrainian")
 

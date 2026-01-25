@@ -38,10 +38,7 @@ class RateLimiter:
         """
         async with self.semaphore:
             await self._wait_for_rate_limit()
-            try:
-                yield
-            finally:
-                pass
+            yield
 
     async def _wait_for_rate_limit(self) -> None:
         """Wait if we've exceeded the requests-per-minute limit."""
@@ -60,8 +57,3 @@ class RateLimiter:
 
             # Record this request
             self.request_times.append(time.monotonic())
-
-    def reset(self) -> None:
-        """Reset the rate limiter state."""
-        self.request_times.clear()
-        logger.debug("Rate limiter reset")
