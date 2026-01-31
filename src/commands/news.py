@@ -37,7 +37,7 @@ class NewsCog(commands.Cog):
 
         # Create news command group with dynamic subcommands
         news_group = app_commands.Group(
-            name="news", description="Get summarized Reddit news in Ukrainian"
+            name="news", description="Отримати підсумок новин з Reddit українською"
         )
 
         # Add subcommand for each available group
@@ -45,7 +45,7 @@ class NewsCog(commands.Cog):
             self._add_group_subcommand(news_group, group_name)
 
         # Add "all" subcommand to fetch all groups
-        @news_group.command(name="all", description="Fetch news from all groups")
+        @news_group.command(name="all", description="Завантажити новини з усіх груп")
         async def news_all(interaction: "Interaction") -> None:
             await self._fetch_news(interaction, target_groups=None)
 
@@ -55,7 +55,7 @@ class NewsCog(commands.Cog):
     def _add_group_subcommand(self, news_group: app_commands.Group, group_name: str) -> None:
         """Add a subcommand for a specific news group."""
 
-        @news_group.command(name=group_name, description=f"Fetch {group_name} news")
+        @news_group.command(name=group_name, description=f"Завантажити новини {group_name}")
         async def group_command(interaction: "Interaction") -> None:
             await self._fetch_news(interaction, target_groups=[group_name])
 
@@ -113,11 +113,8 @@ class NewsCog(commands.Cog):
                         model=model,
                     )
 
-                    header = f"{grp.upper()} - NEWS SUMMARY"
-                    header_line = "=" * len(header)
-                    file_content = f"{header}\n{header_line}\n\n{summary}"
                     file = discord.File(
-                        fp=io.BytesIO(file_content.encode("utf-8")),
+                        fp=io.BytesIO(summary.encode("utf-8")),
                         filename=f"{grp}_news_{date.today().isoformat()}.txt",
                     )
 
@@ -136,8 +133,8 @@ class NewsCog(commands.Cog):
             logger.exception("Error in /news command")
             await interaction.followup.send(f"Сталася помилка: {e}")
 
-    @app_commands.command(name="setmodel", description="Set the AI model for news summaries")
-    @app_commands.describe(model="Anthropic model name (e.g., claude-sonnet-4-20250514)")
+    @app_commands.command(name="setmodel", description="Встановити модель ШІ для підсумків")
+    @app_commands.describe(model="Назва моделі Anthropic (напр. claude-sonnet-4-20250514)")
     async def setmodel(self, interaction: "Interaction", model: str) -> None:
         """Set the Anthropic model for this server."""
         guild_id = interaction.guild_id
@@ -166,13 +163,13 @@ class NewsCog(commands.Cog):
             f"Це налаштування буде використовуватися для всіх команд `/news` на цьому сервері."
         )
 
-    @app_commands.command(name="getmodel", description="Show the current AI model setting")
+    @app_commands.command(name="getmodel", description="Показати поточну модель ШІ")
     async def getmodel(self, interaction: "Interaction") -> None:
         """Show the current model setting."""
         model = self._get_model(interaction.guild_id)
         await interaction.response.send_message(f"Поточна модель: `{model}`")
 
-    @app_commands.command(name="groups", description="List available news groups")
+    @app_commands.command(name="groups", description="Показати доступні групи новин")
     async def groups(self, interaction: "Interaction") -> None:
         """List available subreddit groups."""
         available_groups = self.fetcher.get_available_groups()
