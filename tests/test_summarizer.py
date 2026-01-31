@@ -140,7 +140,7 @@ class TestSummarizer:
     ) -> None:
         result = await summarizer.summarize("world", [])
 
-        assert "No posts found" in result
+        assert "Не знайдено постів" in result
         mock_anthropic_client.generate.assert_not_called()
 
 

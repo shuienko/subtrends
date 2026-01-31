@@ -72,7 +72,7 @@ class Summarizer:
             Summarized news content
         """
         if not posts:
-            return f"No posts found for group '{group_name}' in the last 24 hours."
+            return f"Не знайдено постів для групи '{group_name}' за останні 24 години."
 
         prompt = self._build_summary_prompt(group_name, posts)
 
@@ -140,7 +140,7 @@ class Summarizer:
         # Step 3: Append source URLs
         if posts:
             urls_section = "\n\n════════════════════════════════════════\n"
-            urls_section += "SOURCES / ДЖЕРЕЛА\n"
+            urls_section += "ДЖЕРЕЛА\n"
             urls_section += "════════════════════════════════════════\n\n"
             for post in posts:
                 title = post.title[:60] + "..." if len(post.title) > 60 else post.title
