@@ -35,17 +35,40 @@ class NewsCog(commands.Cog):
         # Guild-specific model settings (in-memory)
         self.model_settings: dict[int, str] = {}
 
+        # Create news command group with dynamic subcommands
+        news_group = app_commands.Group(
+            name="news", description="Get summarized Reddit news in Ukrainian"
+        )
+
+        # Add subcommand for each available group
+        for group_name in sorted(fetcher.get_available_groups().keys()):
+            self._add_group_subcommand(news_group, group_name)
+
+        # Add "all" subcommand to fetch all groups
+        @news_group.command(name="all", description="Fetch news from all groups")
+        async def news_all(interaction: "Interaction") -> None:
+            await self._fetch_news(interaction, target_groups=None)
+
+        # Register command group with cog
+        self.__cog_app_commands__.append(news_group)
+
+    def _add_group_subcommand(self, news_group: app_commands.Group, group_name: str) -> None:
+        """Add a subcommand for a specific news group."""
+
+        @news_group.command(name=group_name, description=f"Fetch {group_name} news")
+        async def group_command(interaction: "Interaction") -> None:
+            await self._fetch_news(interaction, target_groups=[group_name])
+
     def _get_model(self, guild_id: int | None) -> str:
         """Get the model setting for a guild."""
         if guild_id is None:
             return self.default_model
         return self.model_settings.get(guild_id, self.default_model)
 
-    @app_commands.command(name="news", description="Get summarized Reddit news in Ukrainian")
-    @app_commands.describe(group="News group to fetch (e.g., world, spain). Empty for all.")
-    async def news(self, interaction: "Interaction", group: str | None = None) -> None:
-        """Fetch and summarize Reddit news."""
-        # Defer response for long operation (gives 15 minutes instead of 3 seconds)
+    async def _fetch_news(
+        self, interaction: "Interaction", target_groups: list[str] | None
+    ) -> None:
+        """Fetch and summarize Reddit news for specified groups."""
         await interaction.response.defer()
 
         try:
@@ -57,17 +80,8 @@ class NewsCog(commands.Cog):
                 )
                 return
 
-            # Determine which groups to fetch
-            if group:
-                group_lower = group.lower()
-                if group_lower not in available_groups:
-                    available = ", ".join(f"`{g}`" for g in available_groups.keys())
-                    await interaction.followup.send(
-                        f"Unknown group `{group}`. Available groups: {available}"
-                    )
-                    return
-                target_groups = [group_lower]
-            else:
+            # Use all groups if none specified
+            if target_groups is None:
                 target_groups = list(available_groups.keys())
 
             guild_id = interaction.guild_id
@@ -77,10 +91,8 @@ class NewsCog(commands.Cog):
                 f"Fetching news for group(s): {', '.join(target_groups)}..."
             )
 
-            # Process each group
             for grp in target_groups:
                 try:
-                    # Fetch posts
                     subreddit_group = await self.fetcher.fetch_group(grp)
 
                     if not subreddit_group.posts:
@@ -94,14 +106,12 @@ class NewsCog(commands.Cog):
                         f"Generating summary..."
                     )
 
-                    # Summarize and translate
                     summary = await self.summarizer.summarize_and_translate(
                         group_name=grp,
                         posts=subreddit_group.posts,
                         model=model,
                     )
 
-                    # Create text file with full summary
                     header = f"{grp.upper()} - NEWS SUMMARY"
                     header_line = "=" * len(header)
                     file_content = f"{header}\n{header_line}\n\n{summary}"
