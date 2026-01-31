@@ -35,17 +35,40 @@ class NewsCog(commands.Cog):
         # Guild-specific model settings (in-memory)
         self.model_settings: dict[int, str] = {}
 
+        # Create news command group with dynamic subcommands
+        news_group = app_commands.Group(
+            name="news", description="Отримати підсумок новин з Reddit українською"
+        )
+
+        # Add subcommand for each available group
+        for group_name in sorted(fetcher.get_available_groups().keys()):
+            self._add_group_subcommand(news_group, group_name)
+
+        # Add "all" subcommand to fetch all groups
+        @news_group.command(name="all", description="Завантажити новини з усіх груп")
+        async def news_all(interaction: "Interaction") -> None:
+            await self._fetch_news(interaction, target_groups=None)
+
+        # Register command group with cog
+        self.__cog_app_commands__.append(news_group)
+
+    def _add_group_subcommand(self, news_group: app_commands.Group, group_name: str) -> None:
+        """Add a subcommand for a specific news group."""
+
+        @news_group.command(name=group_name, description=f"Завантажити новини {group_name}")
+        async def group_command(interaction: "Interaction") -> None:
+            await self._fetch_news(interaction, target_groups=[group_name])
+
     def _get_model(self, guild_id: int | None) -> str:
         """Get the model setting for a guild."""
         if guild_id is None:
             return self.default_model
         return self.model_settings.get(guild_id, self.default_model)
 
-    @app_commands.command(name="news", description="Get summarized Reddit news in Ukrainian")
-    @app_commands.describe(group="News group to fetch (e.g., world, spain). Empty for all.")
-    async def news(self, interaction: "Interaction", group: str | None = None) -> None:
-        """Fetch and summarize Reddit news."""
-        # Defer response for long operation (gives 15 minutes instead of 3 seconds)
+    async def _fetch_news(
+        self, interaction: "Interaction", target_groups: list[str] | None
+    ) -> None:
+        """Fetch and summarize Reddit news for specified groups."""
         await interaction.response.defer()
 
         try:
@@ -53,60 +76,45 @@ class NewsCog(commands.Cog):
 
             if not available_groups:
                 await interaction.followup.send(
-                    "No subreddit groups configured. Please set SUB_* environment variables."
+                    "Групи сабредітів не налаштовані. "
+                    "Будь ласка, встановіть змінні середовища SUB_*."
                 )
                 return
 
-            # Determine which groups to fetch
-            if group:
-                group_lower = group.lower()
-                if group_lower not in available_groups:
-                    available = ", ".join(f"`{g}`" for g in available_groups.keys())
-                    await interaction.followup.send(
-                        f"Unknown group `{group}`. Available groups: {available}"
-                    )
-                    return
-                target_groups = [group_lower]
-            else:
+            # Use all groups if none specified
+            if target_groups is None:
                 target_groups = list(available_groups.keys())
 
             guild_id = interaction.guild_id
             model = self._get_model(guild_id)
 
             await interaction.followup.send(
-                f"Fetching news for group(s): {', '.join(target_groups)}..."
+                f"Завантаження новин для груп(и): {', '.join(target_groups)}..."
             )
 
-            # Process each group
             for grp in target_groups:
                 try:
-                    # Fetch posts
                     subreddit_group = await self.fetcher.fetch_group(grp)
 
                     if not subreddit_group.posts:
                         await interaction.followup.send(
-                            f"**{grp.upper()}**: No posts found in the last 24 hours."
+                            f"**{grp.upper()}**: Не знайдено постів за останні 24 години."
                         )
                         continue
 
                     await interaction.followup.send(
-                        f"Found {len(subreddit_group.posts)} posts for **{grp.upper()}**. "
-                        f"Generating summary..."
+                        f"Знайдено {len(subreddit_group.posts)} постів для **{grp.upper()}**. "
+                        f"Генерую підсумок..."
                     )
 
-                    # Summarize and translate
                     summary = await self.summarizer.summarize_and_translate(
                         group_name=grp,
                         posts=subreddit_group.posts,
                         model=model,
                     )
 
-                    # Create text file with full summary
-                    header = f"{grp.upper()} - NEWS SUMMARY"
-                    header_line = "=" * len(header)
-                    file_content = f"{header}\n{header_line}\n\n{summary}"
                     file = discord.File(
-                        fp=io.BytesIO(file_content.encode("utf-8")),
+                        fp=io.BytesIO(summary.encode("utf-8")),
                         filename=f"{grp}_news_{date.today().isoformat()}.txt",
                     )
 
@@ -117,21 +125,23 @@ class NewsCog(commands.Cog):
 
                 except Exception as e:
                     logger.exception(f"Error processing group '{grp}'")
-                    await interaction.followup.send(f"Error fetching news for **{grp}**: {e}")
+                    await interaction.followup.send(
+                        f"Помилка завантаження новин для **{grp}**: {e}"
+                    )
 
         except Exception as e:
             logger.exception("Error in /news command")
-            await interaction.followup.send(f"An error occurred: {e}")
+            await interaction.followup.send(f"Сталася помилка: {e}")
 
-    @app_commands.command(name="setmodel", description="Set the AI model for news summaries")
-    @app_commands.describe(model="Anthropic model name (e.g., claude-sonnet-4-20250514)")
+    @app_commands.command(name="setmodel", description="Встановити модель ШІ для підсумків")
+    @app_commands.describe(model="Назва моделі Anthropic (напр. claude-sonnet-4-20250514)")
     async def setmodel(self, interaction: "Interaction", model: str) -> None:
         """Set the Anthropic model for this server."""
         guild_id = interaction.guild_id
 
         if guild_id is None:
             await interaction.response.send_message(
-                "This command can only be used in a server.",
+                "Цю команду можна використовувати лише на сервері.",
                 ephemeral=True,
             )
             return
@@ -140,7 +150,7 @@ class NewsCog(commands.Cog):
         valid_prefixes = ("claude-", "claude-3", "claude-sonnet", "claude-opus", "claude-haiku")
         if not any(model.startswith(prefix) for prefix in valid_prefixes):
             await interaction.response.send_message(
-                f"Invalid model name: `{model}`. Model should start with 'claude-'.",
+                f"Недійсна назва моделі: `{model}`. Назва моделі повинна починатися з 'claude-'.",
                 ephemeral=True,
             )
             return
@@ -149,26 +159,26 @@ class NewsCog(commands.Cog):
         logger.info(f"Model set to '{model}' for guild {guild_id}")
 
         await interaction.response.send_message(
-            f"Model set to: `{model}`\n"
-            f"This setting will be used for all `/news` commands in this server."
+            f"Модель встановлено: `{model}`\n"
+            f"Це налаштування буде використовуватися для всіх команд `/news` на цьому сервері."
         )
 
-    @app_commands.command(name="getmodel", description="Show the current AI model setting")
+    @app_commands.command(name="getmodel", description="Показати поточну модель ШІ")
     async def getmodel(self, interaction: "Interaction") -> None:
         """Show the current model setting."""
         model = self._get_model(interaction.guild_id)
-        await interaction.response.send_message(f"Current model: `{model}`")
+        await interaction.response.send_message(f"Поточна модель: `{model}`")
 
-    @app_commands.command(name="groups", description="List available news groups")
+    @app_commands.command(name="groups", description="Показати доступні групи новин")
     async def groups(self, interaction: "Interaction") -> None:
         """List available subreddit groups."""
         available_groups = self.fetcher.get_available_groups()
 
         if not available_groups:
-            await interaction.response.send_message("No subreddit groups configured.")
+            await interaction.response.send_message("Групи сабредітів не налаштовані.")
             return
 
-        lines = ["**Available News Groups:**\n"]
+        lines = ["**Доступні групи новин:**\n"]
         for name, subreddits in available_groups.items():
             subs = ", ".join(f"r/{s}" for s in subreddits)
             lines.append(f"- **{name.upper()}**: {subs}")

@@ -16,7 +16,7 @@ INITIAL_RETRY_DELAY = 2  # seconds
 class AnthropicClient:
     """Async wrapper for the Anthropic API."""
 
-    def __init__(self, api_key: str | None = None, default_model: str = "claude-haiku-4-5"):
+    def __init__(self, api_key: str | None = None, default_model: str = "claude-opus-4-5"):
         """
         Initialize the Anthropic client.
 
