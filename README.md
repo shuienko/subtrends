@@ -4,10 +4,13 @@ A Discord bot that fetches Reddit news from configured subreddit groups, summari
 
 ## Features
 
-- `/news [group]` - Fetch and summarize Reddit news (summary attached as .txt file)
+- `/news <group>` - Fetch and summarize Reddit news from a specific group (e.g., `/news world`, `/news tech`)
+- `/news all` - Fetch news from all configured subreddit groups
 - `/setmodel <model>` - Set the AI model for summaries (per-server)
 - `/getmodel` - Show the current model setting
 - `/groups` - List available news groups
+
+All bot responses are in Ukrainian.
 
 ## Setup
 
@@ -65,10 +68,12 @@ A Discord bot that fetches Reddit news from configured subreddit groups, summari
 | `REDDIT_CLIENT_SECRET` | Yes | Reddit API client secret |
 | `REDDIT_USER_AGENT` | No | User agent for Reddit API (default: `subtrends:v1.0`) |
 | `ANTHROPIC_API_KEY` | Yes | Anthropic API key |
-| `DEFAULT_MODEL` | No | Anthropic model for summaries (default: `claude-haiku-4-5`) |
+| `DEFAULT_MODEL` | No | Anthropic model for summaries (default: `claude-opus-4-5`) |
 | `SUB_<NAME>` | Yes | Subreddit groups (comma-separated) |
 | `NUM_POSTS` | No | Posts per subreddit (default: 7) |
 | `NUM_COMMENTS` | No | Comments per post (default: 7) |
+| `MAX_CONCURRENT_REQUESTS` | No | Maximum concurrent Reddit API requests (default: 5) |
+| `REQUESTS_PER_MINUTE` | No | Rate limit for Reddit requests (default: 60) |
 
 ### Subreddit Groups
 
@@ -85,15 +90,17 @@ SUB_TECH=programming,webdev,machinelearning
 ### Available Make Commands
 
 ```bash
-make help        # Show all commands
-make setup       # Create venv and install dependencies
-make run         # Run the bot locally
-make test        # Run tests
-make lint        # Run linting (ruff + mypy)
-make format      # Format code with ruff
-make clean       # Remove venv and cache files
+make help          # Show all commands
+make setup         # Create venv and install dependencies
+make run           # Run the bot locally
+make test          # Run tests
+make test-cov      # Run tests with coverage
+make lint          # Run linting (ruff + mypy)
+make format        # Format code with ruff
+make clean         # Remove venv and cache files
 make docker-build  # Build Docker image
 make docker-run    # Run in Docker
+make docker-shell  # Open a shell in the Docker container
 ```
 
 ## CI/CD
